@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import type { LyricLine } from "@shared/types/lyrics";
 import type { AudioRecognitionResult } from "@/stores/audioRecognition";
+import {
+  defaultKeywords,
+  defaultRegexes,
+  normalizeLyricLines,
+  parseLyric,
+  pickLatestStartedIndex,
+  stripLyricMetadata,
+} from "lyric-kit";
 import AudioRecognitionLyricText from "./AudioRecognitionLyricText.vue";
 import { requestPlatformLyric } from "@/services/lyric/request";
-import { parseLyric } from "@/utils/lyric/parse";
-import { normalizeLyricLines } from "@/utils/lyric/normalize";
-import { stripLyricMetadata } from "@/utils/lyric/lyricStripper";
-import {
-  keywords as defaultExcludeKeywords,
-  regexes as defaultExcludeRegexes,
-} from "@/utils/lyric/excludeRules";
-import { pickLatestStartedIndex } from "@shared/utils/lyricSync";
+import { getLineText } from "@shared/utils/lyrics";
 import { formatTime } from "@/utils/time";
 import { navigateToAlbum, navigateToArtist } from "@/utils/navigate";
 import { useSettingsStore } from "@/stores/settings";
@@ -55,11 +56,7 @@ const INSTRUMENTAL_PLACEHOLDERS = new Set([
 ]);
 
 /** 获取歌词行的可见文本 */
-const lineText = (line: LyricLine): string =>
-  line.words
-    .map((word) => word.word)
-    .join("")
-    .trim();
+const lineText = (line: LyricLine): string => getLineText(line).trim();
 
 /** 判断网易云用于纯音乐的占位歌词 */
 const isInstrumentalPlaceholder = (text: string): boolean =>
@@ -91,14 +88,28 @@ const loadLyric = async (): Promise<void> => {
     const lyric = await requestPlatformLyric("netease", props.result.track);
     if (token !== loadToken) return;
     if (!lyric) return;
-    const lines = parseLyric(lyric, lyric.format, settings.locale, {
-      detectBackground: settings.lyric.detectBackgroundLyrics,
-    });
+    const parsed = parseLyric(
+      {
+        content: lyric.content,
+        format: lyric.format,
+        translation: lyric.translation,
+        translationFormat: lyric.translationFormat,
+        romaji: lyric.romaji,
+        romajiFormat: lyric.romajiFormat,
+      },
+      {
+        preferredLang: settings.locale,
+        extractMetadata: true,
+        cleanKangxi: true,
+        detectBackground: settings.lyric.detectBackgroundLyrics,
+      },
+    );
+    const lines = parsed.lines;
     normalizeLyricLines(lines);
     const mainLines = lines.filter((line) => !line.isBG && lineText(line).length > 0);
     const contentLines = stripLyricMetadata(mainLines, {
-      keywords: defaultExcludeKeywords,
-      regexPatterns: defaultExcludeRegexes,
+      keywords: [...defaultKeywords],
+      regexPatterns: [...defaultRegexes],
     });
     const visibleMainLines = contentLines.filter(
       (line) => !isInstrumentalPlaceholder(lineText(line)),

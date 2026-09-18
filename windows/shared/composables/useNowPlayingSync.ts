@@ -2,7 +2,8 @@ import type { Ref, ShallowRef } from "vue";
 import type { LyricLine } from "@shared/types/lyrics";
 import type { NowPlayingSnapshot } from "@shared/types/nowPlaying";
 import type { Track } from "@shared/types/player";
-import { clampLastLineEnd, pickLatestActiveIndex } from "@shared/utils/lyricSync";
+import { pickLatestActiveIndex } from "@shared/utils/lyricSync";
+import { clampLastLineEnd } from "lyric-kit";
 
 /** 同步偏差阈值 */
 const SYNC_DRIFT_THRESHOLD = 300;

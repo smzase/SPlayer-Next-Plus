@@ -1157,6 +1157,12 @@
       "replace": "Replace the entire play queue",
       "append": "Add the track to the current play queue"
     },
+    "searchPlayBehavior": {
+      "label": "Search Playback Behavior",
+      "description": "Playback strategy when double-clicking a track on the search page",
+      "current": "Play Current Track Only",
+      "all": "Play All Results"
+    },
     "showLyricInBar": {
       "label": "Show Lyric While Playing",
       "description": "Replace artist name with current lyric in the bottom player bar"
@@ -1205,6 +1211,10 @@
     "syncWindowsVolumeMixer": {
       "label": "Sync Windows Volume Mixer",
       "description": "Keep the player volume in sync with the Windows volume mixer in both directions"
+    },
+    "rememberDeviceVolume": {
+      "label": "Remember Device Volume",
+      "description": "Independently save and restore volume for each audio output device"
     },
     "pauseOnDeviceSwitch": {
       "label": "Pause on Device Switch",
@@ -1485,17 +1495,25 @@
       "label": "Show Translation",
       "description": "Display translated lyrics"
     },
-    "showRomanization": {
-      "label": "Show Romanization",
-      "description": "Display romanized lyrics"
+    "showRuby": {
+      "label": "Show Ruby",
+      "description": "Display ruby annotation text (furigana/pinyin) above words"
     },
-    "amllShowLineRomanization": {
+    "showRomanization": {
       "label": "Show Line Romanization",
       "description": "Display romanized lyrics for each line"
     },
-    "amllShowWordRomanization": {
+    "showWordRomanization": {
       "label": "Show Word Romanization",
       "description": "Display romanized lyrics for each word in word-by-word lyrics"
+    },
+    "enableScale": {
+      "label": "Lyric Scale",
+      "description": "Scale down inactive lines slightly to highlight current line"
+    },
+    "bgAlwaysBelow": {
+      "label": "Background Lyrics Always Below",
+      "description": "Always place background vocal lines below the main lyric line"
     },
     "enableWordHighlight": {
       "label": "Word Highlight",
@@ -1922,10 +1940,6 @@
       "confirmResetDesc": "Groups, names, order and visibility will be reset to defaults!",
       "featureDisabled": "Feature disabled"
     },
-    "showStatsInSidebar": {
-      "label": "Show Play Stats Entry",
-      "description": "Show the play statistics page entry in the sidebar"
-    },
     "showQualitySwitch": {
       "label": "Show Quick Quality Switch",
       "description": "Show the online audio quality tag in the player bar for quick switching"
@@ -2049,10 +2063,11 @@
     },
     "updateChannel": {
       "label": "Update Channel",
-      "description": "Choose Stable, Beta preview, or Alpha experimental updates",
+      "description": "Choose between Stable, Beta preview, Alpha internal, or Nightly updates",
       "stable": "Stable",
       "beta": "Beta Preview",
-      "alpha": "Alpha Experimental"
+      "alpha": "Alpha Experimental",
+      "nightly": "Nightly Build"
     },
     "checkUpdate": {
       "label": "Check for Updates",

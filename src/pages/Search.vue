@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Track } from "@shared/types/player";
+import type { PlaybackContext, Track } from "@shared/types/player";
 import { ALL_PLATFORMS, PLATFORM_SHORT_NAME, type Platform } from "@shared/types/platform";
 import type { CoverItem } from "@/types/artist";
 import type {
@@ -295,6 +295,14 @@ const isEmptyResult = computed(() => {
   const state = states[activeTab.value];
   return state.loaded && state.items.length === 0;
 });
+
+/** 搜索页播放来源上下文 */
+const playbackContext = computed<PlaybackContext>(() => ({
+  provider: status.searchPlatform,
+  originId: `search:${status.searchPlatform}:${keyword.value}`,
+  originType: "page",
+  originName: keyword.value ? `${t("search.title")}: ${keyword.value}` : t("search.title"),
+}));
 </script>
 
 <template>
@@ -363,6 +371,7 @@ const isEmptyResult = computed(() => {
         :items="activeTab === 'songs' ? states.songs.items : states.voices.items"
         :source="status.searchPlatform"
         :related-collection-type="activeTab === 'voices' ? 'radio' : 'album'"
+        :playback-context="playbackContext"
         :show-size="false"
         :has-more="activeTab === 'songs' ? states.songs.hasMore : states.voices.hasMore"
         :loading-more="activeTab === 'songs' ? states.songs.loadingMore : states.voices.loadingMore"

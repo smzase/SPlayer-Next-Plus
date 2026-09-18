@@ -117,7 +117,6 @@ export const useSettingsStore = defineStore(
       sidebarKeepEmptyDivider: false,
       sidebarNameWithDivider: false,
       sidebarPlaylistOrder: { myLocal: [], myOnline: [], subscribed: [] },
-      showStatsInSidebar: true,
       showQualitySwitch: false,
       closeAction: "hide",
       rememberCloseChoice: false,
@@ -142,6 +141,7 @@ export const useSettingsStore = defineStore(
       autoImmersive: true,
       outputDevice: null,
       pauseOnDeviceSwitch: false,
+      rememberDeviceVolume: false,
       enableSpectrum: false,
       spectrumBarWidth: 4,
       reverseSpectrum: false,
@@ -153,6 +153,7 @@ export const useSettingsStore = defineStore(
       snapToLyric: false,
       showLyricInBar: true,
       preloadNextTrack: false,
+      searchPlayBehavior: "current",
     });
 
     /** 强迫症设置 */
@@ -183,9 +184,11 @@ export const useSettingsStore = defineStore(
       fontFamilyKorean: "",
       fontFamilyChinese: "",
       showTranslation: true,
+      showRuby: true,
       showRomanization: true,
-      amllShowLineRomanization: true,
-      amllShowWordRomanization: true,
+      showWordRomanization: true,
+      enableScale: true,
+      bgAlwaysBelow: false,
       enableWordHighlight: true,
       enableFloatAnimation: false,
       enableEmphasizeEffect: false,

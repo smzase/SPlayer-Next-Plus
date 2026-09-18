@@ -13,16 +13,14 @@ import IconShuffle from "~icons/lucide/shuffle";
 import IconListMusic from "~icons/lucide/list-music";
 import IconPlayOrder from "~icons/sp/play-order";
 import TaskbarLyricLine from "./components/TaskbarLyricLine.vue";
-import {
-  hasRealWordTiming,
-  pickLatestStartedIndex,
-  pickPrimaryIndex,
-} from "@shared/utils/lyricSync";
+import { hasRealWordTiming } from "@shared/utils/lyricSync";
+import { pickLatestStartedIndex, pickPrimaryIndex } from "lyric-kit";
 import {
   getNowPlayingCurrentMs,
   useNowPlayingSync,
 } from "@windows/shared/composables/useNowPlayingSync";
 import { formatArtists } from "@shared/utils/track";
+import { getLineText } from "@shared/utils/lyrics";
 
 const config = reactive<TaskbarLyricSettings>({
   position: "auto",
@@ -317,7 +315,7 @@ const items = computed<RenderItem[]>(() => {
         key: `line-${idx}`,
         role: "primary",
         kind: "lyric",
-        text: line.words.map((word) => word.word).join(""),
+        text: getLineText(line),
         line,
       },
     ];
@@ -337,7 +335,7 @@ const items = computed<RenderItem[]>(() => {
             key: `line-${idx + 1}`,
             role: "secondary",
             kind: "lyric",
-            text: next.words.map((word) => word.word).join(""),
+            text: getLineText(next),
             line: next,
           });
         }

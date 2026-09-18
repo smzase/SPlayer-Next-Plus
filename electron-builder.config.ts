@@ -13,7 +13,7 @@ const fileAssociations = [...SUPPORTED_AUDIO_EXTENSIONS].map((extension) => {
 });
 
 const packageVersion = JSON.parse(readFileSync("package.json", "utf8")).version as string;
-const prereleaseChannel = /-(alpha|beta)(?:\.|$)/.exec(packageVersion)?.[1];
+const prereleaseChannel = /-(alpha|beta|nightly)(?:\.|$)/.exec(packageVersion)?.[1];
 const inferredUpdateChannel = prereleaseChannel ?? "latest";
 const updateChannel = process.env.UPDATE_CHANNEL ?? inferredUpdateChannel;
 const repositoryUrl = JSON.parse(readFileSync("package.json", "utf8")).repository.url as string;
@@ -21,7 +21,12 @@ const defaultReleaseRepository = new URL(repositoryUrl).pathname.replace(/^\/|\/
 const releaseRepository = process.env.RELEASE_REPOSITORY ?? defaultReleaseRepository;
 const [releaseOwner, releaseRepo, ...unexpectedParts] = releaseRepository.split("/");
 
-if (updateChannel !== "latest" && updateChannel !== "beta" && updateChannel !== "alpha") {
+if (
+  updateChannel !== "latest" &&
+  updateChannel !== "beta" &&
+  updateChannel !== "alpha" &&
+  updateChannel !== "nightly"
+) {
   throw new Error(`不支持的更新通道: ${updateChannel}`);
 }
 if (!releaseOwner || !releaseRepo || unexpectedParts.length > 0) {
@@ -102,6 +107,12 @@ const config: Configuration = {
       from: "native/opencc",
       to: "native",
       filter: ["*.node"],
+    },
+  ],
+  extraFiles: [
+    {
+      from: "LICENSE",
+      to: "LICENSE",
     },
   ],
   win: {
