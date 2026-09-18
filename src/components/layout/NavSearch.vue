@@ -11,14 +11,13 @@ import { useCopyText } from "@/composables/useCopyText";
 import type { DropdownMenuItem } from "@/components/ui/SDropdownMenu.vue";
 import type { TrackSource } from "@shared/types/player";
 import * as player from "@/core/player";
-import IconLucideAudioWaveform from "~icons/lucide/audio-waveform";
+import IconLucideCopy from "~icons/lucide/copy";
+import IconEye from "~icons/lucide/eye";
+import IconEyeOff from "~icons/lucide/eye-off";
 import IconLucideMusic from "~icons/lucide/music";
 import IconLucideUser from "~icons/lucide/user";
 import IconLucideDisc from "~icons/lucide/disc";
 import IconLucideListMusic from "~icons/lucide/list-music";
-import IconLucideCopy from "~icons/lucide/copy";
-import IconEye from "~icons/lucide/eye";
-import IconEyeOff from "~icons/lucide/eye-off";
 
 const { t, locale } = useI18n();
 const router = useRouter();
@@ -39,7 +38,6 @@ const dialogOpen = computed({
   set: (value: boolean) => (status.searchOpen = value),
 });
 const searchQuery = ref("");
-const recognitionOpen = ref(false);
 
 const trimmedQuery = computed(() => searchQuery.value.trim());
 
@@ -291,32 +289,19 @@ onMounted(() => {
 </script>
 
 <template>
-  <!-- 搜索框触发器与听歌识曲 -->
-  <div class="flex items-center gap-2 shrink-0">
-    <div
-      role="button"
-      :aria-label="t('nav.searchPlaceholder')"
-      class="app-no-drag w-60 h-10 px-4 cursor-pointer flex items-center gap-2 rounded-full border border-solid bg-on-surface/3 border-on-surface/15 hover:bg-on-surface/10 hover:border-on-surface/25 transition-colors duration-250 select-none"
-      @click="dialogOpen = true"
-      @contextmenu.prevent="dialogOpen = true"
-      @mousedown.prevent
-    >
-      <IconLucideSearch class="size-4 text-on-surface-variant/50 shrink-0" />
-      <span class="flex-1 min-w-0 truncate text-base text-on-surface-variant/40">
-        {{ t("nav.searchPlaceholder") }}
-      </span>
-    </div>
-    <SButton
-      class="app-no-drag shrink-0"
-      variant="tertiary"
-      circle
-      :size="40"
-      :icon-size="20"
-      @click="recognitionOpen = true"
-    >
-      <template #icon><IconLucideAudioWaveform /></template>
-    </SButton>
-  <RecognitionDialog v-model:open="recognitionOpen" />
+  <!-- 搜索框触发器 -->
+  <div
+    role="button"
+    :aria-label="t('nav.searchPlaceholder')"
+    class="app-no-drag w-60 h-10 px-4 cursor-pointer flex items-center gap-2 rounded-full border border-solid bg-on-surface/3 border-on-surface/15 hover:bg-on-surface/10 hover:border-on-surface/25 transition-colors duration-250 select-none"
+    @click="dialogOpen = true"
+    @contextmenu.prevent="dialogOpen = true"
+    @mousedown.prevent
+  >
+    <IconLucideSearch class="size-4 text-on-surface-variant/50 shrink-0" />
+    <span class="flex-1 min-w-0 truncate text-base text-on-surface-variant/40">
+      {{ t("nav.searchPlaceholder") }}
+    </span>
   </div>
   <!-- 搜索弹窗 -->
   <SDialog
