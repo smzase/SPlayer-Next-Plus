@@ -14,6 +14,7 @@ import {
   setEqualizerEnabled,
   setEqualizerBands,
   setPreampGain,
+  setExclusiveMode,
 } from "@main/services/engine";
 import {
   setTaskbarProgress,
@@ -36,7 +37,7 @@ import { setOrpheusProtocolRegistered } from "@main/services/orpheus";
 import { setTaskbarThumbnailEnabled } from "@main/services/thumbnail";
 import { setWindowsVolumeSyncEnabled } from "@main/services/windowsVolumeSync";
 import { applyChannelChange } from "@main/services/updater";
-import type { UpdateChannel } from "@shared/types/settings";
+import { UPDATE_CHANNELS, type UpdateChannel } from "@shared/types/settings";
 
 /**
  * 应用配置写入后的副作用
@@ -77,6 +78,12 @@ const applyConfigChange = (keyPath: string, value: unknown, previous: unknown): 
       break;
     case "player.equalizer.preamp":
       setPreampGain(value as number);
+      break;
+    case "player.audioOutputMode":
+      // 独占模式仅 Windows 引擎支持；切模式后重建输出立即生效
+      if (isWin) {
+        setExclusiveMode(value === "exclusive");
+      }
       break;
     case "system.taskbarProgress":
       if (!value) setTaskbarProgress(-1);
@@ -153,12 +160,7 @@ const applyConfigChange = (keyPath: string, value: unknown, previous: unknown): 
 export const registerConfigIpc = (): void => {
   ipcMain.handle("config:get", (_event, keyPath: string) => store.get(keyPath as ConfigPath));
   ipcMain.handle("config:set", (_event, keyPath: string, value: unknown) => {
-    if (
-      keyPath === "update.channel" &&
-      value !== "stable" &&
-      value !== "beta" &&
-      value !== "alpha"
-    ) {
+    if (keyPath === "update.channel" && !UPDATE_CHANNELS.some((channel) => channel === value)) {
       throw new Error(`无效的更新通道: ${String(value)}`);
     }
     const previous = store.get(keyPath as ConfigPath);

@@ -197,6 +197,23 @@ const playerCategory: SettingCategory = {
           },
         },
         {
+          key: "audioOutputMode",
+          type: "select",
+          binding: { store: "settings", path: "system.player.audioOutputMode" },
+          options: [
+            { value: "shared", labelKey: "settings.audioOutputMode.shared" },
+            { value: "exclusive", labelKey: "settings.audioOutputMode.exclusive" },
+          ],
+          defaultValue: "shared",
+          confirm: {
+            when: (next) => next === "exclusive",
+            titleKey: "settings.confirm.exclusiveModeTitle",
+            contentKey: "settings.confirm.exclusiveModeContent",
+            type: "warning",
+          },
+          visible: () => isWin,
+        },
+        {
           key: "pauseOnDeviceSwitch",
           type: "switch",
           binding: { store: "settings", path: "player.pauseOnDeviceSwitch" },

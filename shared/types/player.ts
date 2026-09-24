@@ -251,7 +251,8 @@ export type PlayerEvent =
   | { type: "toggleLike" }
   | { type: "fftData"; data: FftData }
   | { type: "error"; error: string }
-  | { type: "deviceChanged"; data: { defaultDevice: string | null } };
+  | { type: "deviceChanged"; data: { defaultDevice: string | null } }
+  | { type: "outputFallback"; data: { reason: string } };
 
 /** FFT 数据 */
 export interface FftData {
@@ -265,6 +266,36 @@ export interface IpcResponse<T = void> {
   data?: T;
   /** 错误码（对应 ErrorCode 枚举） */
   error?: string;
+}
+
+/** 真实音频流与硬件输出信息 */
+export interface AudioStreamInfo {
+  /** 当前生效的音频输出设备名称 */
+  deviceName: string;
+  /** 是否为独占模式输出 */
+  isExclusive: boolean;
+  /** 实际输出流采样率（Hz） */
+  outputSampleRate: number;
+  /** 实际输出流声道数 */
+  outputChannels: number;
+  /** 实际输出流位深（bits） */
+  outputBits: number;
+  /** 音源原始采样率（Hz） */
+  sourceSampleRate: number;
+  /** 音源原始位深（bits） */
+  sourceBits: number;
+  /** 是否发生了重采样（音源采样率 != 硬件输出采样率） */
+  isResampling: boolean;
+  /** 均衡器是否启用 */
+  isEqualizerActive: boolean;
+  /** 变速变调是否激活 */
+  isTempoActive: boolean;
+  /** 当前播放倍速 */
+  speed: number;
+  /** 响度均衡是否启用 */
+  isNormalizationActive: boolean;
+  /** 输出限幅器是否激活（DSP 介入时为 true，纯直通时为 false） */
+  isLimiterActive: boolean;
 }
 
 /** 播放器 API */
@@ -287,6 +318,8 @@ export interface PlayerApi {
   getVolume: () => Promise<IpcResponse<number>>;
   /** 获取播放状态快照 */
   getStatus: () => Promise<IpcResponse<PlayerStatus>>;
+  /** 获取当前真实的音频流与输出参数 */
+  getStreamInfo: () => Promise<IpcResponse<AudioStreamInfo>>;
   /** 设置 FFT 频谱推送 */
   setFftEnabled: (enabled: boolean) => Promise<IpcResponse>;
   /** 获取 FFT 频谱数据 */

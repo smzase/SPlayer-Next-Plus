@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use super::events::playback_completion_event;
 use super::{InnerPlayer, PlayerEvent, PlayerState};
-use crate::playback::PlaybackHandle;
+use crate::output::playback::PlaybackHandle;
 
 /// 渐变步数
 const FADE_STEPS: u32 = 20;
@@ -111,8 +111,22 @@ impl InnerPlayer {
             const STALL_THRESHOLD_TICKS: u32 = 6; // 6 * 200ms = 1.2s
             let mut last_consumed = shared.samples_consumed_count();
             let mut stall_ticks: u32 = 0;
+            let mut diagnostic_ticks: u32 = 0;
 
             while !stop_flag.load(Ordering::Relaxed) {
+                diagnostic_ticks += 1;
+                if diagnostic_ticks == 25 || shared.is_all_consumed() {
+                    let underruns = shared.take_underruns();
+                    if underruns > 0 {
+                        tracing::warn!(
+                            underruns,
+                            sample_rate = shared.sample_rate(),
+                            channels = shared.channels(),
+                            "音频输出供数不足"
+                        );
+                    }
+                    diagnostic_ticks = 0;
+                }
                 let consumed = shared.samples_consumed_count();
                 let position = seek_base + shared.consumed_position();
                 cb(PlayerEvent::Position { position, duration });

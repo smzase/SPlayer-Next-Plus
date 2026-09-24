@@ -197,8 +197,9 @@ const applyOnline = (
   }
   // 尝试提交在线歌词
   const preference = useSettingsStore().lyric.lyricSourcePreference;
-  const isExplicit = preference !== "auto" && preference !== "self";
-  // 非显式指定模式（智能选择）下，若当前已展示更优歌词（如候选抢占或插件优选），不降级覆盖
+  // 仅自动模式是智能选择，其余（含跟随自身）均为用户显式指令，来源权威高于格式优劣
+  const isExplicit = preference !== "auto";
+  // 自动模式下，若当前已展示更优歌词（如候选抢占或插件优选），不降级覆盖
   if (!isExplicit && current && !isBetterFormat(online.source.format, current.format)) {
     return;
   }

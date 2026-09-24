@@ -483,4 +483,30 @@ describe("lyric loader", () => {
     expect(media.activeLyric?.platform).toBe("netease");
     expect(media.parsedLyric[0].words[0].word).toContain("网易云普通LRC歌词");
   });
+
+  it("跟随自身：当前展示他站高优先级时，切换为跟随自身必须替换为自身平台歌词", async () => {
+    const settings = useSettingsStore();
+    const media = useMediaStore();
+    const track = createTrack("song_self_switch");
+    media.track = track;
+
+    mockResolveOnlineByPreference.mockResolvedValue({
+      source: { source: "online", format: "qrc", platform: "qqmusic" },
+      input: { content: "[1000,1000]他站优质QRC(1000,1000)" },
+    });
+    await loadForTrack(null);
+    expect(media.activeLyric?.format).toBe("qrc");
+
+    mockResolveOnlineByPreference.mockResolvedValue({
+      source: { source: "online", format: "lrc", platform: "netease" },
+      input: { content: "[00:01.00]自身平台普通LRC歌词" },
+    });
+    settings.lyric.lyricSourcePreference = "self";
+
+    await vi.waitFor(() => {
+      expect(media.activeLyric?.format).toBe("lrc");
+    });
+    expect(media.activeLyric?.platform).toBe("netease");
+    expect(media.parsedLyric[0].words[0].word).toContain("自身平台普通LRC歌词");
+  });
 });

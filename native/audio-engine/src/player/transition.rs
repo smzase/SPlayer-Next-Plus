@@ -2,14 +2,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
-use crate::audio_output::AudioOutput;
 use crate::decoder;
-use crate::equalizer::Equalizer;
+use crate::decoder::buffer::Shared;
+use crate::dsp::equalizer::Equalizer;
+use crate::dsp::fft::FftAnalyzer;
+use crate::dsp::tempo::StretchProcessor;
 use crate::metadata::AudioMetadata;
-use crate::playback::PlaybackHandle;
-use crate::shared::Shared;
-use crate::source::DecoderSource;
-use crate::tempo::StretchProcessor;
+use crate::output::playback::PlaybackHandle;
+use crate::output::AudioOutput;
 use anyhow::Result;
 use ffmpeg_audio::HttpCancelHandle;
 use parking_lot::Mutex;
@@ -53,10 +53,11 @@ pub struct SeekTake {
     pub was_playing: bool,
     /// 当前音频源原始采样率
     pub original_sample_rate: u32,
-    /// 当前输出设备采样率（新 Shared 沿用，与复用的重采样器目标一致）
-    pub output_sample_rate: u32,
-    /// 当前输出设备声道数
-    pub output_channels: u16,
+    /// 当前音频源有效位深，独占模式重建协商候选的优先依据
+    pub original_bits: u32,
+    /// 输出配置随 seek 移交到工作线程，开流失败时允许回退共享格式
+    pub output: AudioOutput,
+    pub fft: Arc<FftAnalyzer>,
     /// 本次 seek 的 token，commit_seeked 时比对最新值，不一致说明已被新 load/seek/stop 取代
     pub token: u64,
     /// 解码侧 DSP 共享实例
@@ -70,6 +71,7 @@ pub struct LoadedPlayback {
     pub decode_handle: JoinHandle<decoder::DecoderData>,
     pub shared: Arc<Shared>,
     pub output: AudioOutput,
+    pub playback: Arc<PlaybackHandle>,
     pub cancel: Option<HttpCancelHandle>,
 }
 
@@ -153,6 +155,7 @@ impl InnerPlayer {
     /// 此时不做任何副作用——尤其不能 bump token，否则会误杀在途的 load
     pub fn take_for_async_seek(&mut self) -> Option<SeekTake> {
         self.decoder_thread.as_ref()?;
+        let output = self.output.take()?;
 
         // 与 load 共用同一 token 序列：commit_seeked 时比对，防止 seek 期间发生的
         // load/stop 完成后被本次 seek 的 commit 覆盖（旧曲复活 + 新解码线程泄漏）
@@ -199,8 +202,9 @@ impl InnerPlayer {
             current_source: self.current_source.clone(),
             was_playing: self.state == PlayerState::Playing,
             original_sample_rate: self.original_sample_rate,
-            output_sample_rate: self.output_sample_rate(),
-            output_channels: self.output_channels(),
+            original_bits: self.original_bits,
+            output,
+            fft: Arc::clone(&self.fft),
             token,
             equalizer: Arc::clone(&self.equalizer),
             tempo: Arc::clone(&self.tempo),
@@ -217,7 +221,8 @@ impl InnerPlayer {
         position_secs: f64,
         shared: Arc<Shared>,
         handle: JoinHandle<decoder::DecoderData>,
-        output: Option<AudioOutput>,
+        output: AudioOutput,
+        playback: Arc<PlaybackHandle>,
     ) -> Result<bool> {
         // 抢占检查：与 commit_loaded 同款，不一致则丢弃本次 seek 结果
         if token != self.load_token.load(Ordering::Acquire) {
@@ -227,16 +232,13 @@ impl InnerPlayer {
             return Ok(false);
         }
 
-        if let Some(out) = output {
-            self.output = Some(out);
-        }
-        let reader = DecoderSource::new(Arc::clone(&shared), Arc::clone(&self.fft));
         let was_paused = self.state == PlayerState::Paused;
-        let volume = self.target_volume;
-        let playback = {
-            let output = self.ensure_output(None)?;
-            Arc::new(PlaybackHandle::attach(output, reader, volume, was_paused)?)
-        };
+        if let Err(error) = playback.activate(self.target_volume, was_paused) {
+            shared.stop();
+            self.enter_paused_for_recovery();
+            return Err(error);
+        }
+        self.output = Some(output);
 
         self.playback = Some(playback);
         self.shared = Some(shared);
@@ -277,6 +279,7 @@ impl InnerPlayer {
             decode_handle,
             shared,
             output,
+            playback,
             cancel,
         } = loaded;
         // 抢占检查：比对最新 token，不等说明已有更新的 load 在路上 / 已 commit
@@ -292,15 +295,15 @@ impl InnerPlayer {
             return Ok(None);
         }
 
+        if let Err(error) = playback.activate(self.target_volume, !auto_play) {
+            if let Some(handle) = cancel {
+                handle.cancel();
+            }
+            shared.stop();
+            return Err(error);
+        }
         self.pending_load_handle = cancel;
         self.output = Some(output);
-
-        let reader = DecoderSource::new(Arc::clone(&shared), Arc::clone(&self.fft));
-        let volume = self.target_volume;
-        let playback = {
-            let output = self.ensure_output(None)?;
-            Arc::new(PlaybackHandle::attach(output, reader, volume, !auto_play)?)
-        };
 
         self.playback = Some(playback);
         self.shared = Some(shared);
@@ -310,6 +313,7 @@ impl InnerPlayer {
 
         self.audio_duration = metadata.duration_secs;
         self.original_sample_rate = metadata.original_sample_rate;
+        self.original_bits = metadata.bits_per_sample;
         self.cover_raw = metadata.cover_raw.take();
 
         if auto_play {

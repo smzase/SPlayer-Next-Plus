@@ -20,6 +20,12 @@ const canSelfInstall = !isMac && !isPortable && !isAppX;
 /** Releases 页 */
 const RELEASES_URL = __APP_RELEASES_URL__;
 
+/** 仓库信息，切回 GitHub provider 时使用 */
+const GITHUB_REPO = { owner: "SPlayer-Dev", repo: "SPlayer-Next" } as const;
+
+/** nightly 固定滚动 tag 的发布资源地址 */
+const NIGHTLY_FEED_URL = `${RELEASES_URL}/download/nightly`;
+
 /** Microsoft Store 更新页 */
 const STORE_UPDATES_URL = "ms-windows-store://updates";
 
@@ -55,12 +61,19 @@ const getChannel = (): UpdateChannel => {
 
 /**
  * 将当前通道应用到 electron-updater
+ * nightly 发布在固定滚动 tag 上，该 tag 不是合法 semver，GitHub provider 会因此找不到
+ * release，故改用 generic provider 直接取清单；其余通道继续使用 GitHub provider
  */
 const applyChannel = (): void => {
   const channel = getChannel();
   autoUpdater.channel = channel === "stable" ? "latest" : channel;
   autoUpdater.allowPrerelease = channel !== "stable";
   autoUpdater.allowDowngrade = false;
+  autoUpdater.setFeedURL(
+    channel === "nightly"
+      ? { provider: "generic", url: NIGHTLY_FEED_URL }
+      : { provider: "github", ...GITHUB_REPO },
+  );
 };
 
 /**
@@ -176,9 +189,10 @@ export const quitAndInstall = (): void => {
 
 /** 打开下载页：AppX 引导 Store 更新，其余跳 Releases */
 export const openDownloadPage = (): void => {
-  const releaseUrl = availableVersion
-    ? `${RELEASES_URL}/tag/v${encodeURIComponent(availableVersion)}`
-    : RELEASES_URL;
+  // nightly 发布在固定 tag 上，无法用版本号拼出对应的 tag 链接
+  const isNightly = getChannel() === "nightly";
+  const tag = isNightly ? "nightly" : availableVersion ? `v${availableVersion}` : null;
+  const releaseUrl = tag ? `${RELEASES_URL}/tag/${encodeURIComponent(tag)}` : RELEASES_URL;
   void shell.openExternal(isAppX ? STORE_UPDATES_URL : releaseUrl);
 };
 

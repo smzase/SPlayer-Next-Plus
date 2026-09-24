@@ -37,6 +37,7 @@ import { useFavorite } from "@/composables/useFavorite";
 import { extractColorFromUrl } from "@/utils/color";
 import { handleError, isSkippableError } from "@/utils/errors";
 import { shouldSkipDjTrack } from "@/utils/preset/djMode";
+import { shouldSkipKeywordTrack } from "@/utils/preset/skipKeywords";
 import { toast } from "@/composables/useToast";
 import i18n from "@/i18n";
 
@@ -83,8 +84,13 @@ const SKIP_ON_ERROR_DELAY_MS = 1000;
  * 达到连续失败上限 / 队列长度则交 onQueueEnded 停下
  * @param myToken - 调用方进入失败路径时的 token 快照
  * @param getCurrentToken - 取该 token 的最新值，setTimeout 触发时再次比对
+ * @param autoPlay - 跳曲后是否自动播放
  */
-const skipOnFailure = async (myToken: number, getCurrentToken: () => number): Promise<void> => {
+const skipOnFailure = async (
+  myToken: number,
+  getCurrentToken: () => number,
+  autoPlay = true,
+): Promise<void> => {
   consecutiveFailures++;
   if (
     consecutiveFailures >= MAX_CONSECUTIVE_FAILURES ||
@@ -95,7 +101,7 @@ const skipOnFailure = async (myToken: number, getCurrentToken: () => number): Pr
     return;
   }
   setTimeout(() => {
-    if (myToken === getCurrentToken()) nextTrack();
+    if (myToken === getCurrentToken()) nextTrack(autoPlay);
   }, SKIP_ON_ERROR_DELAY_MS);
 };
 
@@ -284,13 +290,25 @@ const loadTrackSourceWithFallback = async (
  * 乐观更新：立即显示歌曲信息，快速切歌时只有最后一次 load 生效
  * @param track - 要播放的 Track，为 null 时忽略
  * @param context - 本次播放的来源上下文
+ * @param autoPlay - 是否自动播放，暂停态恢复（如源失效跳曲）时传 false，全程不发声
  */
-const loadTrack = async (track: Track | null, context?: PlaybackContext): Promise<void> => {
+const loadTrack = async (
+  track: Track | null,
+  context?: PlaybackContext,
+  autoPlay = true,
+): Promise<void> => {
   if (!track) return;
-  // Fuck DJ Mode
   const settings = useSettingsStore();
   if (settings.preset.fuckDjMode && shouldSkipDjTrack(track)) {
-    await nextTrack();
+    await nextTrack(autoPlay);
+    return;
+  }
+  // 跳过指定关键词歌曲
+  if (
+    settings.preset.skipKeywordsSongs &&
+    shouldSkipKeywordTrack(track, settings.preset.skipTrackKeywords)
+  ) {
+    await nextTrack(autoPlay);
     return;
   }
   const myToken = ++trackToken;
@@ -305,39 +323,48 @@ const loadTrack = async (track: Track | null, context?: PlaybackContext): Promis
   void window.api.player.stop();
   // 是否可跳曲
   let shouldSkip = false;
-  const loaded = await loadTrackSourceWithFallback(
-    track,
-    context,
-    true,
-    () => myToken === trackToken,
-    false,
-    preloaded?.source,
-  );
-  if (loaded.status === "cancelled") return;
-  if (loaded.status === "unresolved") {
-    const status = useStatusStore();
-    status.currentSource = null;
-    status.state = "idle";
-    void window.api.player.stop();
-    useMediaStore().setLyric(null, null);
-    shouldSkip = true;
-  } else {
-    const { result, resolved } = loaded;
-    if (!result.ok && result.error && isSkippableError(result.error)) {
-      handleError(result.error);
+  try {
+    const loaded = await loadTrackSourceWithFallback(
+      track,
+      context,
+      autoPlay,
+      () => myToken === trackToken,
+      false,
+      preloaded?.source,
+    );
+    if (loaded.status === "cancelled") return;
+    if (loaded.status === "unresolved") {
+      const status = useStatusStore();
+      status.currentSource = null;
+      status.state = "idle";
+      void window.api.player.stop();
+      useMediaStore().setLyric(null, null);
       shouldSkip = true;
-    } else if (result.ok) {
-      // 用户主动触发的成功播放记入历史；initPlayer 的恢复路径走 load() 不经此处
-      void useHistoryStore().record(track);
-      if (resolved.cacheRequest) {
-        cacheScheduler.schedule(track.id, resolved.cacheRequest);
+    } else {
+      const { result, resolved } = loaded;
+      if (!result.ok && result.error && isSkippableError(result.error)) {
+        handleError(result.error);
+        shouldSkip = true;
+      } else if (result.ok) {
+        // 用户主动触发的成功播放记入历史；initPlayer 的恢复路径走 load() 不经此处
+        void useHistoryStore().record(track);
+        if (resolved.cacheRequest) {
+          cacheScheduler.schedule(track.id, resolved.cacheRequest);
+        }
+        scheduleNextTrackPreload();
+      } else if (result.error) {
+        handleError(result.error);
       }
-      scheduleNextTrackPreload();
-    } else if (result.error) {
-      handleError(result.error);
+    }
+  } finally {
+    if (myToken === trackToken) {
+      const status = useStatusStore();
+      if (shouldSkip || status.state !== "playing") {
+        status.trackLoading = false;
+      }
     }
   }
-  if (shouldSkip) await skipOnFailure(myToken, () => trackToken);
+  if (shouldSkip) await skipOnFailure(myToken, () => trackToken, autoPlay);
 };
 
 /**
@@ -386,14 +413,15 @@ let sourceRecoveryTrackId: string | null = null;
 
 /**
  * 源失效恢复
- * 重载一次后仍失败则放弃跳曲
+ * 重载一次后仍失败则放弃跳曲，保持恢复前的播放 / 暂停态
  */
 export const recoverFromSourceFailure = async (): Promise<void> => {
   const track = useMediaStore().track;
   if (!track) return;
+  const wasPlaying = useStatusStore().isPlaying;
   // 本地文件源失效（文件被删/磁盘错误）没有重载意义，直接跳曲
   if (track.source === "local") {
-    await nextTrack();
+    await nextTrack(wasPlaying);
     return;
   }
   if (sourceRecoveryTrackId !== track.id) {
@@ -403,15 +431,16 @@ export const recoverFromSourceFailure = async (): Promise<void> => {
   // 最多重载一次
   if (sourceRecoveryCount >= 1) {
     sourceRecoveryCount = 0;
-    await nextTrack();
+    await nextTrack(wasPlaying);
     return;
   }
   sourceRecoveryCount++;
   // 重载失败（重新解析的 URL 仍失效 / 加载报错，且不会再有 sourceError 兜底）→ 立即跳曲
-  const ok = await reloadCurrentTrack(true);
+  // 不传 forcePlay：遵从当前播放状态，暂停态下重载后保持暂停
+  const ok = await reloadCurrentTrack();
   if (!ok) {
     sourceRecoveryCount = 0;
-    await nextTrack();
+    await nextTrack(wasPlaying);
   }
 };
 
@@ -789,13 +818,14 @@ export const dislikeFmTrack = async (): Promise<void> => {
 
 /**
  * 播放下一首
+ * @param autoPlay - 是否自动播放
  */
-export const nextTrack = async (): Promise<void> => {
+export const nextTrack = async (autoPlay = true): Promise<void> => {
   const status = useStatusStore();
   // 私人 FM
   if (status.fmMode) {
     const next = await fm.next();
-    if (next) await loadTrack(next);
+    if (next) await loadTrack(next, undefined, autoPlay);
     return;
   }
   if (queue.queueLength.value === 0) return;
@@ -811,7 +841,7 @@ export const nextTrack = async (): Promise<void> => {
   } else {
     status.playIndex++;
   }
-  await loadTrack(status.currentTrack, status.currentPlaybackContext);
+  await loadTrack(status.currentTrack, status.currentPlaybackContext, autoPlay);
 };
 
 /**

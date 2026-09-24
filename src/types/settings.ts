@@ -7,6 +7,8 @@ import type { QualityLevel } from "@/utils/quality";
 
 /** 播放器背景类型 */
 export type PlayerBgType = "blur" | "solid" | "animation";
+/** 流体背景渲染引擎 */
+export type PlayerBgRenderer = "mesh" | "isolation" | "pixi";
 export type CoverLayout = "default" | "fullscreen";
 
 /** 点击歌曲列表中的单曲时如何更新播放队列 */
@@ -206,7 +208,6 @@ export interface LyricSettings {
   /** AMLL 歌词优化 */
   amllCleanUnintentionalOverlaps: boolean;
   amllTryAdvanceStartTime: boolean;
-  amllConvertExcessiveBackgroundLines: boolean;
   amllSyncMainAndBackgroundLines: boolean;
   amllNormalizeSpaces: boolean;
   amllResetLineTimestamps: boolean;
@@ -218,6 +219,8 @@ export interface PlayerSettings {
   singleTrackQueueMode: SingleTrackQueueMode;
   /** 播放器背景类型 */
   playerBgType: PlayerBgType;
+  /** 流体背景渲染引擎 */
+  playerBgRenderer: PlayerBgRenderer;
   /** 流体背景帧率（fps） */
   playerBgFps: number;
   /** 流体背景流动速度 */
@@ -308,10 +311,12 @@ export interface AppearanceSettings {
 
 /** 强迫症设置 */
 export interface PresetSettings {
-  /** Fuck DJ Mode */
+  /** 兼容旧版的 DJ 跳过模式 */
   fuckDjMode: boolean;
-  /** Fuck ** Mode */
-  uncensorProfanity: boolean;
+  /** 跳过指定关键词歌曲 */
+  skipKeywordsSongs: boolean;
+  /** 跳过指定关键词列表 */
+  skipTrackKeywords: string[];
   /** 隐藏歌曲列表的 VIP 标签 */
   hideVipTag: boolean;
   /** 隐藏歌曲列表的音质标签 */

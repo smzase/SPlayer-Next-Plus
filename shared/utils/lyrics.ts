@@ -1,5 +1,9 @@
 import type { LyricLine, LyricWord } from "../types/lyrics";
 
+const hasLegacyTrailingSpace = (word: LyricWord): boolean =>
+  "endsWithSpace" in word &&
+  Boolean((word as LyricWord & { endsWithSpace?: boolean }).endsWithSpace);
+
 /**
  * 获取单个单词的纯文本内容（自动处理词尾空格）
  * @param word - 歌词单词节点
@@ -7,7 +11,7 @@ import type { LyricLine, LyricWord } from "../types/lyrics";
  */
 export const getWordText = (word?: LyricWord | null): string => {
   if (!word) return "";
-  return word.word + (word.endsWithSpace && !/\s$/.test(word.word) ? " " : "");
+  return word.word + (hasLegacyTrailingSpace(word) && !/\s$/.test(word.word) ? " " : "");
 };
 
 /**
@@ -17,7 +21,7 @@ export const getWordText = (word?: LyricWord | null): string => {
  */
 export const getWordRomaji = (word?: LyricWord | null): string => {
   if (!word?.romanWord) return "";
-  return word.romanWord + (word.endsWithSpace && !/\s$/.test(word.romanWord) ? " " : "");
+  return word.romanWord + (hasLegacyTrailingSpace(word) && !/\s$/.test(word.romanWord) ? " " : "");
 };
 
 /**

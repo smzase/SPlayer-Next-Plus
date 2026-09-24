@@ -107,6 +107,7 @@
     "delete": "Delete",
     "enable": "Enable",
     "enabled": "Enabled",
+    "disabled": "Disabled",
     "active": "Active",
     "saveAndRelaunch": "Save & Relaunch",
     "reset": "Reset",
@@ -840,7 +841,11 @@
     }
   },
   "quality": {
-    "details": "Audio Quality",
+    "outputInfo": "Output Information",
+    "outputSection": "Output Information",
+    "outputMode": "Output Mode",
+    "dspSection": "Audio Processing",
+    "details": "Audio Details",
     "codec": "Codec",
     "sampleRate": "Sample Rate",
     "bitDepth": "Bit Depth",
@@ -848,7 +853,10 @@
     "channels": "Channels",
     "stereo": "Stereo",
     "mono": "Mono",
-    "multiChannel": "Multi-channel"
+    "multiChannel": "Multi-channel",
+    "tempoPitch": "Speed & Pitch",
+    "limiter": "Output Limiter",
+    "resampling": "Resampling"
   },
   "song": {
     "unknownArtist": "Unknown artist"
@@ -1127,13 +1135,23 @@
       "label": "Auto Play",
       "description": "Automatically start playback after loading a track"
     },
-    "fuckDjMode": {
-      "label": "Fuck DJ Mode",
-      "description": "Auto skip songs with DJ, TikTok, 0.9, 0.8, viral, car, hot, slow rock in the title"
+    "skipKeywordsSongs": {
+      "label": "Skip Songs by Keywords",
+      "description": "Automatically skip tracks when title or artist matches specified keywords",
+      "button": "Manage",
+      "enable": "Enable Skip by Keywords",
+      "enableDesc": "Automatically skip to next track when keywords match"
     },
-    "uncensorProfanity": {
-      "label": "Fuck ** Mode",
-      "description": "Restore masked profanity in lyrics to original words"
+    "skipKeywordsRules": {
+      "label": "Keyword List",
+      "description": "Customize song keywords to skip",
+      "button": "Manage",
+      "hint": "Tracks containing these keywords in title or artist will be skipped",
+      "placeholder": "Enter keyword",
+      "add": "Add",
+      "clear": "Clear list",
+      "empty": "No keywords configured",
+      "duplicate": "Keyword already exists"
     },
     "hideVipTag": {
       "label": "Hide VIP Tag",
@@ -1215,6 +1233,17 @@
     "rememberDeviceVolume": {
       "label": "Remember Device Volume",
       "description": "Independently save and restore volume for each audio output device"
+    },
+    "audioOutputMode": {
+      "label": "Audio Output Mode",
+      "description": "Select the current Windows WASAPI audio output mode",
+      "shared": "Shared Mode",
+      "exclusive": "WASAPI Exclusive Mode",
+      "fallback": {
+        "deviceBusy": "The device could not be opened exclusively and has fallen back to shared mode",
+        "formatUnsupported": "The device does not support the required exclusive-mode format, falling back to shared mode",
+        "unavailable": "Exclusive mode is currently unavailable, falling back to shared mode"
+      }
     },
     "pauseOnDeviceSwitch": {
       "label": "Pause on Device Switch",
@@ -1398,7 +1427,9 @@
       "testChannelTitle": "Switch to a Test Channel",
       "testChannelContent": "Beta and Alpha channels receive test releases early. Alpha releases may be highly unstable. Switch anyway?",
       "kugouLoginVersionTitle": "Switch KG Login Version",
-      "kugouLoginVersionContent": "After switching, the current credentials will not match the new version. You must log out and scan the QR code again, or VIP privileges and high-quality playback will stop working. Switch anyway?"
+      "kugouLoginVersionContent": "After switching, the current credentials will not match the new version. You must log out and scan the QR code again, or VIP privileges and high-quality playback will stop working. Switch anyway?",
+      "exclusiveModeTitle": "Switch to Exclusive Mode",
+      "exclusiveModeContent": "Exclusive mode bypasses the system mixer and prefers the source sample rate and bit depth, making it suitable for external DACs / Hi-Fi gear. Player volume, EQ and other processing still apply, so bit-perfect output is not guaranteed. Other apps may be unable to play audio while exclusive. If exclusive mode is unavailable, shared mode will be attempted; it may also fail if another app holds the device exclusively. Switch anyway?"
     },
     "useAMSpring": {
       "label": "Spring Animation Debug Switch",
@@ -1443,10 +1474,6 @@
     "amllTryAdvanceStartTime": {
       "label": "Advance Animation Start Time",
       "description": "Advance lyric entry animation (up to 1s) for smoother transitions"
-    },
-    "amllConvertExcessiveBackgroundLines": {
-      "label": "Convert Excessive Background Lines",
-      "description": "Convert consecutive multi-line background vocals into a single-line background vocal attached to the main line"
     },
     "amllSyncMainAndBackgroundLines": {
       "label": "Sync Background Lines Timing",
@@ -1817,6 +1844,13 @@
       "blur": "Blur",
       "solid": "Solid",
       "animation": "Fluid"
+    },
+    "playerBgRenderer": {
+      "label": "Render Engine",
+      "description": "Select the rendering engine for fluid animation background",
+      "mesh": "Mesh Gradient Renderer",
+      "isolation": "Isolation Renderer",
+      "pixi": "PixiJS Renderer"
     },
     "playerBgFlowSpeed": {
       "label": "Flow Speed",

@@ -7,13 +7,13 @@ use ffmpeg_audio::HttpCancelHandle;
 use parking_lot::Mutex;
 use tracing::{debug, info};
 
-use crate::audio_output::{AudioOutput, OutputFailureCallback};
 use crate::decoder;
-use crate::equalizer::{Equalizer, EQ_BAND_COUNT};
-use crate::fft::FftAnalyzer;
-use crate::playback::PlaybackHandle;
-use crate::shared::Shared;
-use crate::tempo::StretchProcessor;
+use crate::decoder::buffer::Shared;
+use crate::dsp::equalizer::{Equalizer, EQ_BAND_COUNT};
+use crate::dsp::fft::FftAnalyzer;
+use crate::dsp::tempo::StretchProcessor;
+use crate::output::playback::PlaybackHandle;
+use crate::output::{AudioOutput, ExclusiveFallbackCallback, OutputFailureCallback};
 
 mod background;
 mod events;
@@ -79,6 +79,10 @@ pub struct InnerPlayer {
     output_generation: Arc<AtomicU64>,
     /// 当前音频源的原始采样率
     original_sample_rate: u32,
+    /// 当前音频源的有效位深，独占模式协商候选的优先依据
+    original_bits: u32,
+    /// WASAPI 独占模式开关（仅 Windows 生效，重建设备时生效）
+    exclusive_mode: bool,
     /// 正在打开的网络音源中断句柄，确保切歌和 stop 能取消元数据探测
     pending_load_handle: Option<HttpCancelHandle>,
 }
@@ -91,22 +95,9 @@ const _: fn() = || {
 };
 
 impl InnerPlayer {
-    /// 未初始化时通过 `AudioOutput::new` 懒构造音频输出。
-    /// 设备失效时的重建由 `reinit_output` 显式处理，不在此函数内自动恢复
-    fn ensure_output(&mut self, requested_sample_rate: Option<u32>) -> Result<&AudioOutput> {
-        if self.output.is_none() {
-            let generation = self.reserve_output_generation();
-            let on_failure = self.make_failure_callback(generation);
-            self.output = Some(AudioOutput::new(
-                self.selected_device.as_deref(),
-                requested_sample_rate,
-                generation,
-                on_failure,
-            )?);
-        }
-        self.output
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("ensure_output 后置条件违反"))
+    /// 获取输出流使用的频谱分析器。
+    pub fn fft_handle(&self) -> Arc<FftAnalyzer> {
+        Arc::clone(&self.fft)
     }
 
     /// 构造输出失败回调：只发送轻量 `PlayerEvent::OutputFailed`，
@@ -123,25 +114,24 @@ impl InnerPlayer {
         })
     }
 
+    /// 构造独占模式回退回调：只发送轻量 `PlayerEvent::OutputFallback`
+    pub fn make_fallback_callback(&self, generation: u64) -> ExclusiveFallbackCallback {
+        let Some(cb) = self.event_callback.as_ref().map(Arc::clone) else {
+            return std::sync::Arc::new(|_| {});
+        };
+        let active_generation = Arc::clone(&self.output_generation);
+        std::sync::Arc::new(move |reason: &str| {
+            if active_generation.load(Ordering::Acquire) == generation {
+                cb(PlayerEvent::OutputFallback {
+                    reason: reason.to_string(),
+                });
+            }
+        })
+    }
+
     /// 预留下一代输出流，并立即使旧输出的回调失效。
     pub fn reserve_output_generation(&self) -> u64 {
         self.output_generation.fetch_add(1, Ordering::AcqRel) + 1
-    }
-
-    /// 当前实际输出流采样率（播放重采样目标）
-    pub fn output_sample_rate(&self) -> u32 {
-        self.output
-            .as_ref()
-            .map(|out| out.sample_rate())
-            .unwrap_or(decoder::DEFAULT_TARGET_SAMPLE_RATE)
-    }
-
-    /// 当前实际输出流声道数
-    pub fn output_channels(&self) -> u16 {
-        self.output
-            .as_ref()
-            .map(AudioOutput::channels)
-            .unwrap_or(decoder::DEFAULT_OUTPUT_CHANNELS)
     }
 
     pub fn new() -> Result<Self> {
@@ -185,6 +175,8 @@ impl InnerPlayer {
             load_token: Arc::new(AtomicU64::new(0)),
             output_generation: Arc::new(AtomicU64::new(0)),
             original_sample_rate: decoder::DEFAULT_TARGET_SAMPLE_RATE,
+            original_bits: 16,
+            exclusive_mode: false,
             pending_load_handle: None,
         })
     }
@@ -193,6 +185,17 @@ impl InnerPlayer {
     pub fn set_output_device(&mut self, device_id: Option<String>) {
         info!(device = ?device_id, "切换输出设备");
         self.selected_device = device_id;
+    }
+
+    /// 设置独占模式开关（下一次重建设备时生效）
+    pub fn set_exclusive_mode(&mut self, enabled: bool) {
+        info!(enabled, "切换音频输出模式");
+        self.exclusive_mode = enabled;
+    }
+
+    /// 独占模式开关是否已启用
+    pub fn is_exclusive_mode(&self) -> bool {
+        self.exclusive_mode
     }
 
     /// 获取当前选择的输出设备（None = 跟随系统默认）
@@ -519,64 +522,55 @@ impl InnerPlayer {
     pub fn pitch_sync(&self) -> bool {
         self.tempo.lock().pitch_sync()
     }
+
+    /// 获取当前真实的音频流与输出信息
+    pub fn stream_info(&self) -> crate::bindings::JsAudioStreamInfo {
+        let (device_name, is_exclusive, output_sample_rate, output_channels, output_bits) =
+            if let Some(output) = &self.output {
+                (
+                    output.device_name(),
+                    output.is_exclusive(),
+                    output.sample_rate(),
+                    output.channels() as u32,
+                    output.bits(),
+                )
+            } else {
+                ("System Default".to_string(), false, 0, 0, 0)
+            };
+
+        let is_resampling = if output_sample_rate > 0 && self.original_sample_rate > 0 {
+            output_sample_rate != self.original_sample_rate
+        } else {
+            false
+        };
+
+        let is_equalizer_active = self.equalizer.lock().enabled();
+        let tempo_locked = self.tempo.lock();
+        let is_tempo_active = !tempo_locked.is_bypass();
+        let speed = tempo_locked.speed() as f64;
+        drop(tempo_locked);
+
+        let is_normalization_active = self.normalization_enabled;
+        let is_limiter_active = is_equalizer_active || is_tempo_active || is_normalization_active;
+
+        crate::bindings::JsAudioStreamInfo {
+            device_name,
+            is_exclusive,
+            output_sample_rate,
+            output_channels,
+            output_bits,
+            source_sample_rate: self.original_sample_rate,
+            source_bits: self.original_bits,
+            is_resampling,
+            is_equalizer_active,
+            is_tempo_active,
+            speed,
+            is_normalization_active,
+            is_limiter_active,
+        }
+    }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    #[test]
-    fn decode_failure_mid_stream_emits_source_error() {
-        let shared = Shared::new(48_000, 2);
-        shared.mark_decode_failed();
-
-        assert!(matches!(
-            playback_completion_event(&shared, 120.0, 30.0),
-            PlayerEvent::SourceError
-        ));
-    }
-
-    #[test]
-    fn decode_failure_near_end_is_treated_as_ended() {
-        let shared = Shared::new(48_000, 2);
-        shared.mark_decode_failed();
-
-        assert!(matches!(
-            playback_completion_event(&shared, 120.0, 118.0),
-            PlayerEvent::Ended
-        ));
-    }
-
-    #[test]
-    fn unknown_duration_failure_emits_source_error() {
-        let shared = Shared::new(48_000, 2);
-        shared.mark_decode_failed();
-
-        assert!(matches!(
-            playback_completion_event(&shared, 0.0, 30.0),
-            PlayerEvent::SourceError
-        ));
-    }
-
-    #[test]
-    fn stale_output_failure_callback_is_ignored() {
-        let mut player = InnerPlayer::new().unwrap();
-        let calls = Arc::new(AtomicUsize::new(0));
-        let calls_for_event = Arc::clone(&calls);
-        player.set_event_callback(Arc::new(move |event| {
-            if matches!(event, PlayerEvent::OutputFailed) {
-                calls_for_event.fetch_add(1, Ordering::Relaxed);
-            }
-        }));
-
-        let generation = player.reserve_output_generation();
-        let callback = player.make_failure_callback(generation);
-        callback();
-        assert_eq!(calls.load(Ordering::Relaxed), 1);
-
-        player.reserve_output_generation();
-        callback();
-        assert_eq!(calls.load(Ordering::Relaxed), 1);
-    }
-}
+#[path = "tests/mod.rs"]
+mod tests;

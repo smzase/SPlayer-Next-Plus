@@ -10,7 +10,6 @@ import {
   parseLyric,
 } from "lyric-kit";
 import { applyLyricExclude } from "@/utils/lyric/lyricStripper";
-import { applyProfanityUncensor } from "@/utils/preset/profanity";
 import { applyLyricCjkTransform } from "@/utils/lyric/cjkTransform";
 
 export const useMediaStore = defineStore("media", () => {
@@ -137,9 +136,9 @@ export const useMediaStore = defineStore("media", () => {
   /** 简繁转换竞态 token */
   let transformToken = 0;
 
-  // 监听简繁转换及强迫症设置变化并重新解析当前歌词
+  // 监听简繁转换设置变化并重新解析当前歌词
   watch(
-    () => [useSettingsStore().lyric.cjkTransform, useSettingsStore().preset.uncensorProfanity],
+    () => useSettingsStore().lyric.cjkTransform,
     () => {
       if (activeLyric.value && lyricContent.value) {
         setLyric(activeLyric.value, lyricContent.value);
@@ -176,10 +175,6 @@ export const useMediaStore = defineStore("media", () => {
         );
         nextLines = applyLyricExclude(result.lines, track.value);
         normalizeLyricLines(nextLines);
-        // Fuck Mode
-        if (settings.preset.uncensorProfanity) {
-          applyProfanityUncensor(nextLines);
-        }
         applyLyricLanguages(nextLines);
         authors = result.metadata.authors?.length
           ? result.metadata.authors

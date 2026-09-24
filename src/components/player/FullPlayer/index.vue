@@ -60,12 +60,16 @@ const { start: startTick, stop: stopTick } = usePlaybackTime((currentMs) => {
 
 /** 展开后 */
 const onAfterEnter = () => {
-  initialLyricTimeMs.value = getCurrentTime() + status.lyricOffsetMs;
-  lyricMounted.value = true;
   nextTick(() => {
     lyricRef.value?.resume();
     startTick();
   });
+};
+
+/** 展开动画开始时就挂载歌词，给引擎预留初始化时间 */
+const onBeforeEnter = () => {
+  initialLyricTimeMs.value = getCurrentTime() + status.lyricOffsetMs;
+  lyricMounted.value = true;
 };
 
 /** 收起前 */
@@ -186,6 +190,7 @@ const showComments = (): void => {
       enter-from-class="translate-y-full"
       leave-to-class="translate-y-full"
       @after-enter="onAfterEnter"
+      @before-enter="onBeforeEnter"
       @before-leave="onBeforeLeave"
       @after-leave="onAfterLeave"
     >

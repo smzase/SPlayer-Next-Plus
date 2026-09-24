@@ -1,6 +1,7 @@
 import type { Track } from "@shared/types/player";
 import type { ShuffleMode } from "@/stores/status";
 import { shouldSkipDjTrack } from "@/utils/preset/djMode";
+import { shouldSkipKeywordTrack } from "@/utils/preset/skipKeywords";
 
 /** 候选歌曲计算上下文 */
 export interface CandidateContext {
@@ -8,6 +9,8 @@ export interface CandidateContext {
   queue: readonly Track[];
   fmMode: boolean;
   fuckDjMode: boolean;
+  skipKeywordsSongs?: boolean;
+  skipTrackKeywords?: readonly string[];
   shuffleMode: ShuffleMode;
   sequentialMode: boolean;
 }
@@ -39,7 +42,10 @@ export const getNextTrackCandidate = (ctx: CandidateContext): CandidateResult | 
     if (ctx.shuffleMode === "on" && candidateIndex >= len) return null;
     const track = ctx.queue[candidateIndex];
     if (track) {
-      if (!ctx.fuckDjMode || !shouldSkipDjTrack(track)) {
+      const skipDj = ctx.fuckDjMode && shouldSkipDjTrack(track);
+      const skipKeyword =
+        ctx.skipKeywordsSongs && shouldSkipKeywordTrack(track, ctx.skipTrackKeywords ?? []);
+      if (!skipDj && !skipKeyword) {
         return { track, index: candidateIndex };
       }
     }

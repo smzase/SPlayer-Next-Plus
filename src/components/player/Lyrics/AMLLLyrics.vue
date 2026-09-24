@@ -85,17 +85,17 @@ const nextFrame = (): Promise<void> =>
 const processedLyrics = computed(() => {
   if (!props.lyricLines) return [];
   return props.lyricLines.map((line) => {
+    const hasWordRoman = line.words.some((w) => Boolean(w.romanWord?.trim()));
+    const showWordRomanForLine = props.showWordRomanization && hasWordRoman;
+    const showLineRomanForLine = props.showRomanization && !showWordRomanForLine;
     const newLine = {
       ...line,
       translatedLyric: props.showTranslation ? line.translatedLyric : "",
-      romanLyric: props.showRomanization ? line.romanLyric : "",
+      romanLyric: showLineRomanForLine ? line.romanLyric : "",
     };
     if (line.words) {
       newLine.words = line.words.map((word) => {
         const newWord = { ...word };
-        if (word.endsWithSpace && !word.word.endsWith(" ")) {
-          newWord.word = word.word + " ";
-        }
         if (!props.showWordRomanization) {
           delete newWord.romanWord;
         }
@@ -211,7 +211,6 @@ onMounted(async () => {
   player.setOptimizeOptions({
     cleanUnintentionalOverlaps: settings.lyric.amllCleanUnintentionalOverlaps,
     tryAdvanceStartTime: settings.lyric.amllTryAdvanceStartTime,
-    convertExcessiveBackgroundLines: settings.lyric.amllConvertExcessiveBackgroundLines,
     syncMainAndBackgroundLines: settings.lyric.amllSyncMainAndBackgroundLines,
     normalizeSpaces: settings.lyric.amllNormalizeSpaces,
     resetLineTimestamps: settings.lyric.amllResetLineTimestamps,
@@ -324,7 +323,6 @@ watch(
   () => ({
     cleanUnintentionalOverlaps: settings.lyric.amllCleanUnintentionalOverlaps,
     tryAdvanceStartTime: settings.lyric.amllTryAdvanceStartTime,
-    convertExcessiveBackgroundLines: settings.lyric.amllConvertExcessiveBackgroundLines,
     syncMainAndBackgroundLines: settings.lyric.amllSyncMainAndBackgroundLines,
     normalizeSpaces: settings.lyric.amllNormalizeSpaces,
     resetLineTimestamps: settings.lyric.amllResetLineTimestamps,
@@ -333,8 +331,6 @@ watch(
     if (!playerRef.value) return;
     playerRef.value.setOptimizeOptions(options);
     if (processedLyrics.value.length > 0 && !isFrozen.value) {
-      const currentTime = getCurrentTime() + status.lyricOffsetMs;
-      playerRef.value.setLyricLines(processedLyrics.value, currentTime);
       processLyricLanguage();
     }
   },

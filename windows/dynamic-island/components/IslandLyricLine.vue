@@ -2,7 +2,6 @@
 import type { LyricLine } from "@shared/types/lyrics";
 import { getWordSweepProgress } from "lyric-kit";
 import { getNowPlayingCurrentMs } from "@windows/shared/composables/useNowPlayingSync";
-import { getLineText, getWordText } from "@shared/utils/lyrics";
 
 const props = defineProps<{
   line: LyricLine;
@@ -101,12 +100,10 @@ onBeforeUnmount(stopRenderLoop);
           :ref="(el) => setWordRef(el, i)"
           class="dl-word"
         >
-          {{ getWordText(word) }}
+          {{ word.word }}
         </span>
       </template>
-      <span v-else class="dl-static">
-        {{ getLineText(line) }}
-      </span>
+      <span v-else class="dl-static">{{ line.words.map((w) => w.word).join("") }}</span>
     </span>
   </div>
 </template>

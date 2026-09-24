@@ -9,7 +9,6 @@ import { useNowPlayingSync } from "@windows/shared/composables/useNowPlayingSync
 import { useDragWindow } from "./composables/useDragWindow";
 import { isMac } from "@/utils/config";
 import { formatArtists } from "@shared/utils/track";
-import { getLineText } from "@shared/utils/lyrics";
 
 const config = reactive<DynamicIslandSettings>({
   scale: 1,
@@ -136,7 +135,7 @@ let phase: "idle" | "shrinking" | "expanding" = "idle";
 let hasPainted = false;
 
 /* 行文本 */
-const lineText = (line: LyricLine): string => getLineText(line);
+const lineText = (line: LyricLine): string => line.words.map((w) => w.word).join("");
 
 /* 计算副行文本 */
 const computeSubText = (idx: number, line: LyricLine | null): string => {
