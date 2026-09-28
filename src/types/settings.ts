@@ -106,12 +106,12 @@ export const DEFAULT_SIDEBAR_NAV_GROUPS: SidebarNavGroup[] = [
   {
     name: "",
     showName: false,
-    keys: ["/", "/library", "/artists/local", "/albums/local", "/folders", "/stats"],
+    keys: ["/", "/follow", "/library", "/artists/local", "/albums/local", "/folders", "/stats"],
   },
   {
     name: "",
     showName: false,
-    keys: ["/liked", "/favorites", "/cloud", "/download", "/streaming", "/history"],
+    keys: ["/liked", "/favorites", "/podcasts", "/cloud", "/download", "/streaming", "/history"],
   },
 ];
 

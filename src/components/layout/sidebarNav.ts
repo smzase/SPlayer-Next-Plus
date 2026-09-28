@@ -1,5 +1,6 @@
 import type { Component } from "vue";
 import IconLucideHome from "~icons/lucide/home";
+import IconLucideUsersRound from "~icons/lucide/users-round";
 import IconLucideMusic from "~icons/lucide/music";
 import IconLucideUser from "~icons/lucide/user";
 import IconLucideDisc3 from "~icons/lucide/disc-3";
@@ -11,6 +12,7 @@ import IconLucideStar from "~icons/lucide/star";
 import IconLucideHistory from "~icons/lucide/history";
 import IconLucideDownload from "~icons/lucide/download";
 import IconLucideCloud from "~icons/lucide/cloud";
+import IconLucidePodcast from "~icons/lucide/podcast";
 
 /** 侧边栏固定导航项元数据 */
 export interface SidebarNavEntry {
@@ -25,6 +27,7 @@ export interface SidebarNavEntry {
 
 const SIDEBAR_NAV_ENTRIES: SidebarNavEntry[] = [
   { key: "/", labelKey: "nav.home", icon: IconLucideHome, hideable: false },
+  { key: "/follow", labelKey: "nav.follow", icon: IconLucideUsersRound, hideable: true },
   { key: "/library", labelKey: "nav.library", icon: IconLucideMusic, hideable: true },
   { key: "/artists/local", labelKey: "artist.label", icon: IconLucideUser, hideable: true },
   { key: "/albums/local", labelKey: "album.label", icon: IconLucideDisc3, hideable: true },
@@ -37,6 +40,7 @@ const SIDEBAR_NAV_ENTRIES: SidebarNavEntry[] = [
     hideable: true,
   },
   { key: "/favorites", labelKey: "nav.favorites", icon: IconLucideStar, hideable: true },
+  { key: "/podcasts", labelKey: "nav.podcasts", icon: IconLucidePodcast, hideable: true },
   { key: "/cloud", labelKey: "nav.cloud", icon: IconLucideCloud, hideable: true },
   { key: "/download", labelKey: "nav.download", icon: IconLucideDownload, hideable: true },
   { key: "/streaming", labelKey: "nav.streaming", icon: IconLucideLibrary, hideable: true },
