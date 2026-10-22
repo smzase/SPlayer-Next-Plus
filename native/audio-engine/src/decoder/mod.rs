@@ -1,3 +1,4 @@
+pub(crate) mod input;
 mod processing;
 mod reader;
 use processing::run_dsp_safely;
@@ -5,6 +6,8 @@ use reader::{build_resamplers, open_source, run_decoding_loop};
 
 pub(crate) mod buffer;
 pub(crate) mod source;
+pub(crate) mod tail;
+pub(crate) mod transition_source;
 
 use std::fs::File;
 use std::sync::Arc;
@@ -64,6 +67,17 @@ pub struct PreparedDecoder {
 }
 
 impl PreparedDecoder {
+    /// CUE 预载从子曲目起点准备，避免切入时丢弃已经准备的 PCM
+    pub fn seek_start(&mut self, position_secs: f64) -> Result<()> {
+        if position_secs > 0.0 {
+            let target = Duration::from_secs_f64(position_secs);
+            self.reader
+                .seek(target, SeekMode::Accurate)
+                .or_else(|_| self.reader.seek(target, SeekMode::Coarse))?;
+        }
+        Ok(())
+    }
+
     /// 音源原始采样率，用于输出流采样率协商（设备支持时按精确采样率打开）
     pub fn original_sample_rate(&self) -> u32 {
         self.metadata.original_sample_rate
@@ -91,7 +105,7 @@ fn run_decode_safely(shared: &Shared, decode: impl FnOnce()) {
 /// 启动解码线程，返回音频元数据和线程句柄
 ///
 /// 线程结束时返回 `DecoderData`，调用方可通过 `handle.join()` 回收并复用于后续 seek，
-/// 避免重建 ffmpeg_audio 上下文。
+/// 避免重建 ffmpeg_audio 上下文
 pub fn prepare_decode(
     source: &str,
     cover_cache_dir: Option<&str>,

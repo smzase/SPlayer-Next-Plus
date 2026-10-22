@@ -1,6 +1,6 @@
 import type { Track } from "@shared/types/player";
 import type { CoverItem } from "@/types/artist";
-import type { NeteaseDjProgram, NeteaseDjRadio } from "@/types/netease";
+import type { NeteaseDjProgram, NeteaseDjRadio } from "@shared/types/platform/netease";
 import type { Podcast } from "@/types/podcast";
 import { songToTrack, withPicSize } from "./netease";
 

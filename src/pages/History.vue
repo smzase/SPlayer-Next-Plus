@@ -160,9 +160,10 @@ watch(
   { immediate: true },
 );
 
+/** 从当前历史分类开始播放，并保留页面来源 */
 const handlePlayAll = (): void => {
   if (currentTracks.value.length > 0) {
-    void player.playFrom(currentTracks.value, 0, playbackContext.value);
+    void player.playFrom(currentTracks.value, { context: playbackContext.value });
   }
 };
 
@@ -345,6 +346,7 @@ onMounted(() => {
         :playback-context="playbackContext"
         :batch-remove="handleTrackRemove"
         :batch-remove-label="t('history.remove')"
+        sort-key="history"
         enable-sort
       />
     </div>

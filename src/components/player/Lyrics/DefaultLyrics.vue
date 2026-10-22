@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { LyricLine } from "@shared/types/lyrics";
-import { DEFAULTS, type SpringParams, LyricRenderer } from "lyric-dom";
+import type { LyricLine } from "lyric-kit";
+
+import { DEFAULTS, type LyricAlignment, type SpringParams, LyricRenderer } from "lyric-dom";
 import "lyric-dom/renderer.css";
-import LyricCredit from "./LyricCredit.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -16,6 +16,8 @@ const props = withDefaults(
      * @default 0.35
      */
     alignPosition?: number;
+    /** 歌词水平对齐方式，auto 按声部自动布局 */
+    alignment?: LyricAlignment;
     /**
      * 逐字掩码渐变宽度比例（相对于文字高度）
      * @range 0 ~ 1（0 = 硬切，1 = 全字高渐变）
@@ -101,6 +103,7 @@ const props = withDefaults(
   {
     playing: false,
     alignPosition: DEFAULTS.alignPosition,
+    alignment: DEFAULTS.alignment,
     wordFadeWidth: DEFAULTS.wordFadeWidth,
     scrollResetDelay: DEFAULTS.scrollResetDelay,
     minInterludeGap: DEFAULTS.minInterludeGap,
@@ -126,6 +129,8 @@ const props = withDefaults(
 interface Emits {
   /** 用户点击歌词行时触发，参数为该行起始时间（毫秒），用于跳转播放进度 */
   (e: "seek", timeMs: number): void;
+  /** 首次布局与逐字测量完成 */
+  (e: "ready"): void;
 }
 
 const emit = defineEmits<Emits>();
@@ -139,10 +144,7 @@ let isFrozen = false;
 let pendingLyrics: LyricLine[] | null = null;
 
 /**
- * 推送当前播放时间（毫秒）
- *
- * 由外部播放器在每帧或定时器中调用，驱动歌词滚动与逐字高亮动画。
- *
+ * 推送当前播放时间，驱动歌词滚动与逐字高亮
  * @param time - 当前播放时间（毫秒）
  * @param _isSeeking - 是否处于跳转状态
  */
@@ -171,7 +173,7 @@ const handleLineClick = (timeMs: number) => {
   emit("seek", timeMs);
 };
 
-onMounted(() => {
+onMounted(async () => {
   if (!containerRef.value) return;
   const { lyricLines: _lyricLines, initialTime: _initialTime, ...config } = props;
   renderer = new LyricRenderer(containerRef.value, {
@@ -186,6 +188,12 @@ onMounted(() => {
     renderer.setLyrics(props.lyricLines);
   }
   bottomLineEl.value = renderer.getBottomLineElement();
+  const current = renderer;
+  await nextTick();
+  await new Promise<void>((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+  );
+  if (renderer === current) emit("ready");
 });
 
 onUnmounted(() => {
@@ -217,6 +225,11 @@ watch(
 watch(
   () => props.wordFadeWidth,
   (v) => renderer?.setConfig({ wordFadeWidth: v }),
+);
+
+watch(
+  () => props.alignment,
+  (v) => renderer?.setConfig({ alignment: v }),
 );
 
 watch(

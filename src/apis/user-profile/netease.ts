@@ -9,7 +9,7 @@ import type {
   UserPageResources,
   UserProfileUpdate,
 } from "@/types/user-profile";
-import type { NeteaseSong } from "@/types/netease";
+import type { NeteaseSong } from "@shared/types/platform/netease";
 import { ensureOk, songToTrack, toPlaylist, withPicSize } from "@/utils/format/netease";
 
 type RawRecord = Record<string, unknown>;

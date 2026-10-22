@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { LyricLine } from "@shared/types/lyrics";
+import type { LyricLine } from "lyric-kit";
 import type { LocaleCode, TaskbarLyricSettings } from "@shared/types/settings";
 import type { TaskbarPlaybackSnapshot, TaskbarPlayMode } from "@shared/types/taskbarLyric";
 import DEFAULT_COVER from "@/assets/images/song.jpg";

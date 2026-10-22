@@ -1,6 +1,7 @@
-import type { PlaybackContext, PlaybackOriginType, Track, TrackFee } from "../types/player";
+import type { PlaybackContext, Track, TrackFee } from "../types/player";
+import type { NeteaseScrobbleMode } from "../types/settings";
 
-export type NeteaseScrobbleSourceType = "song" | "list" | "album" | "artist" | "radio";
+type NeteaseScrobbleSourceType = "song" | "list" | "album" | "artist" | "radio";
 
 export interface NeteaseScrobbleTrack {
   id: string;
@@ -9,82 +10,77 @@ export interface NeteaseScrobbleTrack {
   resourceType: "song" | "dj";
   categoryId?: number;
   title: string;
-  artist: string;
-  bitrate: number;
-  level: string;
-  fee: TrackFee;
   durationSec: number;
+  ncbl?: {
+    sourceid: string;
+    sourceType: NeteaseScrobbleSourceType;
+    artist: string;
+    bitrate: number;
+    level: string;
+    fee: TrackFee;
+  };
 }
 
 /**
- * 计算网易云听歌打卡阈值，短音频同样在播放过半后上报
- * @param durationSec - 音频总时长（秒）
- * @returns 触发上报所需的累计播放毫秒数
- */
-export const neteaseScrobbleThresholdMs = (durationSec: number): number =>
-  durationSec > 0 ? Math.min(durationSec / 2, 240) * 1000 : Infinity;
-
-const asNumericId = (value: string | undefined): string | null =>
-  value && /^\d+$/.test(value) ? value : null;
-
-const toBitrate = (track: Track): number => {
-  const bitRate = track.quality?.bitRate ?? 320;
-  return bitRate > 10000 ? Math.round(bitRate / 1000) : Math.round(bitRate);
-};
-
-const toLevel = (track: Track): string => {
-  if (track.quality?.codec?.toLowerCase() === "flac") return "lossless";
-  if ((track.quality?.bitRate ?? 0) >= 320000) return "exhigh";
-  return "higher";
-};
-
-const toNeteaseSourceType = (type: PlaybackOriginType): NeteaseScrobbleSourceType => {
-  if (type === "track") return "song";
-  if (type === "playlist") return "list";
-  if (type === "album" || type === "artist" || type === "radio") return type;
-  return "song";
-};
-
-/**
- * 从播放曲目生成网易云打卡元数据
+ * 提取播放来源，两个协议共用资源归类，NCBL 额外保留音质信息
  * @param track - 当前播放曲目
- * @param context - 本次播放的来源上下文
+ * @param context - 播放来源上下文
  * @param durationMs - 引擎确认后的时长
- * @returns 网易云曲目返回打卡元数据，其余来源返回 null
+ * @param mode - 上报协议，默认为原版桌面日志
+ * @returns 平台资源的轻量日志信息，其余来源返回 null
  */
 export const toNeteaseScrobbleTrack = (
   track: Track | null,
   context: PlaybackContext | undefined,
   durationMs: number,
+  mode: NeteaseScrobbleMode = "legacy",
 ): NeteaseScrobbleTrack | null => {
-  if (!track || track.source !== "netease") return null;
-  const trackId = asNumericId(track.id);
-  if (!trackId) return null;
-  const voiceId = asNumericId(track.extId);
-  const id = voiceId ?? trackId;
+  if (!track || track.source !== "netease" || !/^[1-9]\d*$/.test(track.id)) return null;
+  const voiceId = track.extId && /^[1-9]\d*$/.test(track.extId) ? track.extId : undefined;
   const neteaseContext =
     context?.provider === "netease" && context.originType !== "page" ? context : undefined;
-  const contextId = asNumericId(neteaseContext?.originId ?? track.playbackSource?.id);
-  const radioId = asNumericId(track.album?.id);
-  return {
-    id,
-    sourceId: contextId ?? (voiceId ? radioId : null) ?? id,
-    sourceType: voiceId
-      ? "radio"
-      : contextId
-        ? neteaseContext
-          ? toNeteaseSourceType(neteaseContext.originType)
-          : (track.playbackSource?.type ?? "song")
-        : "song",
+  const contextId = neteaseContext?.originId ?? track.playbackSource?.id;
+  const sourceId = contextId && /^[1-9]\d*$/.test(contextId) ? contextId : undefined;
+  const radioId = track.album?.id;
+  let sourceType: NeteaseScrobbleSourceType = "song";
+  if (voiceId) sourceType = "radio";
+  else if (sourceId) {
+    const origin = neteaseContext?.originType;
+    if (origin === "playlist") sourceType = "list";
+    else if (origin === "album" || origin === "artist" || origin === "radio") sourceType = origin;
+    else if (!neteaseContext) sourceType = track.playbackSource?.type ?? "song";
+  }
+  const meta: NeteaseScrobbleTrack = {
+    id: voiceId ?? track.id,
+    sourceId:
+      (voiceId ? (radioId && /^[1-9]\d*$/.test(radioId) ? radioId : sourceId) : sourceId) ??
+      voiceId ??
+      track.id,
+    sourceType,
     resourceType: voiceId ? "dj" : "song",
     ...(voiceId && track.playbackSource?.categoryId !== undefined
       ? { categoryId: track.playbackSource.categoryId }
       : {}),
     title: track.title,
-    artist: track.artists.map((artist) => artist.name).join(" / "),
-    bitrate: toBitrate(track),
-    level: toLevel(track),
-    fee: track.fee ?? 0,
     durationSec: Math.round(durationMs / 1000),
+  };
+  if (mode !== "ncbl") return meta;
+
+  const bitrate = track.quality?.bitRate ?? 320;
+  return {
+    ...meta,
+    ncbl: {
+      sourceid: meta.sourceId,
+      sourceType,
+      artist: track.artists.map((artist) => artist.name).join(" / "),
+      bitrate: bitrate > 10000 ? Math.round(bitrate / 1000) : Math.round(bitrate),
+      level:
+        track.quality?.codec?.toLowerCase() === "flac"
+          ? "lossless"
+          : bitrate >= 320000
+            ? "exhigh"
+            : "higher",
+      fee: track.fee ?? 0,
+    },
   };
 };

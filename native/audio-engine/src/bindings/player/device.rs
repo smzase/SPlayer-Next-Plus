@@ -2,13 +2,8 @@ use super::*;
 
 /// 输出恢复阶段 2 的输出
 enum ReinitOutcome {
-    /// 恢复成功：新输出 + 新解码线程，等待提交
-    Resumed {
-        shared: Arc<crate::decoder::buffer::Shared>,
-        handle: JoinHandle<crate::decoder::DecoderData>,
-        output: Box<output::AudioOutput>,
-        playback: Arc<PlaybackHandle>,
-    },
+    /// 提交完成或被新的播放操作取代，资源已经在阻塞线程处理
+    Committed(Result<bool>),
     /// 无法从原位置恢复解码（或输出采样率已变），需要重新加载音源
     Reload {
         source: Option<String>,
@@ -23,7 +18,7 @@ impl AudioPlayer {
     /// 重新初始化音频输出设备（系统休眠唤醒、设备热插拔或输出流错误后调用）
     ///
     /// 恢复为全成全败：新输出创建失败时不启动解码、不提交状态，保留当前曲目与位置，
-    /// 播放器进入暂停态并返回设备错误；在线音源不会因设备错误触发 URL 重取或 sourceError。
+    /// 播放器进入暂停态并返回设备错误；在线音源不会因设备错误触发 URL 重取或 sourceError
     #[napi]
     pub async fn reinit_output(&self) -> Result<()> {
         info!("重新初始化音频输出设备");
@@ -78,6 +73,7 @@ impl AudioPlayer {
                 tempo,
             } = take;
 
+            let inner = Arc::clone(&self.inner);
             let outcome: ReinitOutcome = tokio::task::spawn_blocking(move || {
                 let decoder_data = old_threads.join_aux().and_then(|h| h.join().ok());
                 drop(old_output);
@@ -146,27 +142,19 @@ impl AudioPlayer {
                     }
                 };
 
-                ReinitOutcome::Resumed {
-                    shared,
-                    handle,
-                    output: Box::new(output),
-                    playback,
-                }
+                ReinitOutcome::Committed(
+                    inner
+                        .lock()
+                        .commit_seeked(token, position, shared, handle, output, playback)
+                        .into_napi(),
+                )
             })
             .await
             .map_err(|e| Error::from_reason(format!("reinit task join error: {e}")))?;
 
             match outcome {
-                ReinitOutcome::Resumed {
-                    shared,
-                    handle,
-                    output,
-                    playback,
-                } => {
-                    let mut player = self.inner.lock();
-                    let committed = player
-                        .commit_seeked(token, position, shared, handle, *output, playback)
-                        .into_napi()?;
+                ReinitOutcome::Committed(result) => {
+                    let committed = result?;
                     if !committed {
                         info!("reinit 已被更新的 load/seek/stop 取代，丢弃结果");
                     }
@@ -181,7 +169,7 @@ impl AudioPlayer {
                     }
                     if let Some(src) = source {
                         let is_remote = src.starts_with("http://") || src.starts_with("https://");
-                        if let Err(e) = self.load(src, Some(was_playing)).await {
+                        if let Err(e) = self.load(src, Some(was_playing), None).await {
                             if is_cancelled_napi_error(&e) {
                                 return Ok(());
                             }
@@ -214,7 +202,7 @@ impl AudioPlayer {
         // 没有 decoder_thread（例如上次 reinit 失败），但存在待恢复的曲目，走重新加载
         if let Some(src) = fallback_source {
             let is_remote = src.starts_with("http://") || src.starts_with("https://");
-            if let Err(e) = self.load(src, Some(was_playing_fallback)).await {
+            if let Err(e) = self.load(src, Some(was_playing_fallback), None).await {
                 if is_cancelled_napi_error(&e) {
                     return Ok(());
                 }

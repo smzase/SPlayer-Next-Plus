@@ -1,5 +1,5 @@
-import type { Track } from "@shared/types/player";
-import type { Collection } from "@/types/collection";
+import type { Track, TrackSource } from "@shared/types/player";
+import type { Collection, CollectionType } from "@/types/collection";
 
 /**
  * 取在线平台的歌曲分享链接
@@ -24,39 +24,47 @@ export const getTrackShareUrl = (track: Track | null | undefined): string | null
 export const getShareUrl = getTrackShareUrl;
 
 /**
- * 取得在线平台的歌单、专辑或电台分享链接
- * @param collection - 当前集合，本地、流媒体和云盘集合不提供平台分享链接
+ * 获取在线平台歌曲合集的分享地址
+ * @param collection - 待分享的歌曲合集
+ * @returns 分享地址，不支持的来源返回 null
  */
 export const getCollectionShareUrl = (
   collection: Pick<Collection, "id" | "source" | "type"> | null | undefined,
 ): string | null => {
   if (!collection?.id) return null;
-  if (collection.source === "netease") {
-    const path = {
-      playlist: "playlist",
-      album: "album",
-      radio: "djradio",
-      cloud: "",
-    }[collection.type];
-    return path ? `https://music.163.com/#/${path}?id=${collection.id}` : null;
-  }
-  if (collection.source === "qqmusic") {
-    const path = {
-      playlist: "playlist",
-      album: "albumDetail",
-      radio: "",
-      cloud: "",
-    }[collection.type];
-    return path ? `https://y.qq.com/n/ryqq_v2/${path}/${collection.id}` : null;
-  }
-  if (collection.source === "kugou") {
-    const path = {
-      playlist: `songlist/${collection.id}/`,
-      album: `album/info/${collection.id}/`,
-      radio: `song/#fm_id=${collection.id}`,
-      cloud: "",
-    }[collection.type];
-    return path ? `https://www.kugou.com/${path}` : null;
-  }
-  return null;
+  const urls: Record<CollectionType, Record<TrackSource, string | null>> = {
+    album: {
+      netease: `https://music.163.com/#/album?id=${collection.id}`,
+      qqmusic: `https://y.qq.com/n/ryqq_v2/albumDetail/${collection.id}`,
+      kugou: `https://www.kugou.com/album/info/${collection.id}/`,
+      streaming: null,
+      plugin: null,
+      local: null,
+    },
+    playlist: {
+      netease: `https://music.163.com/#/playlist?id=${collection.id}`,
+      qqmusic: `https://y.qq.com/n/ryqq_v2/playlist/${collection.id}`,
+      kugou: `https://www.kugou.com/songlist/${collection.id}/`,
+      streaming: null,
+      plugin: null,
+      local: null,
+    },
+    radio: {
+      netease: `https://music.163.com/#/djradio?id=${collection.id}`,
+      qqmusic: `https://y.qq.com/n/ryqq_v2/player_radio#id=${collection.id}`,
+      kugou: `https://www.kugou.com/song/#fm_id=${collection.id}`,
+      streaming: null,
+      plugin: null,
+      local: null,
+    },
+    cloud: {
+      netease: null,
+      qqmusic: null,
+      kugou: null,
+      streaming: null,
+      plugin: null,
+      local: null,
+    },
+  };
+  return urls[collection.type]?.[collection.source] ?? null;
 };

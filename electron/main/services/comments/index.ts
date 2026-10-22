@@ -1,4 +1,5 @@
 import { callNetease } from "@main/apis/netease";
+
 import { pickBestCandidate, type LyricCandidate } from "@main/apis/common/lyric/utils";
 import { pluginRegistry, type PluginRuntime } from "@main/plugins/registry";
 import { callMusicComment, callMusicSearch } from "@main/plugins/router";

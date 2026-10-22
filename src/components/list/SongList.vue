@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import type { Artist, PlaybackContext, Track, TrackSource } from "@shared/types/player";
 import type { CollectionType } from "@/types/collection";
-import type { SortField } from "@/types/list";
+import type { SongListSortKey, SongListSortPreference, SortField, SortOrder } from "@/types/list";
 import { useMediaStore } from "@/stores/media";
 import { useStatusStore } from "@/stores/status";
 import { useSettingsStore } from "@/stores/settings";
+import { useDownloadStore } from "@/stores/download";
 import { useTrackMenu } from "@/composables/useTrackMenu";
 import { useMultiSelect } from "@/composables/useMultiSelect";
 import { useDownload } from "@/composables/useDownload";
@@ -17,19 +18,6 @@ import { isLosslessQuality, getQualityLabel } from "@/utils/quality";
 import { navigateToAlbum, navigateToArtist, navigateToPodcast } from "@/utils/navigate";
 import type { SVirtualListExposed } from "@/components/ui/SVirtualList.vue";
 import * as player from "@/core/player";
-import IconArrowUpDown from "~icons/lucide/arrow-up-down";
-import IconArrowUpAz from "~icons/lucide/arrow-up-az";
-import IconLucideListEnd from "~icons/lucide/list-end";
-import IconLucideListPlus from "~icons/lucide/list-plus";
-import IconLucideListMinus from "~icons/lucide/list-minus";
-import IconLucideDownload from "~icons/lucide/download";
-import IconLucideTrash2 from "~icons/lucide/trash-2";
-import IconLucideArrowLeftRight from "~icons/lucide/arrow-left-right";
-import IconLucideX from "~icons/lucide/x";
-import IconLucideCloud from "~icons/lucide/cloud";
-import IconLucideCloudOff from "~icons/lucide/cloud-off";
-import IconFavorite from "~icons/material-symbols/favorite-rounded";
-import IconFavoriteOutline from "~icons/material-symbols/favorite-outline-rounded";
 
 import IconLink2 from "~icons/lucide/link-2";
 
@@ -59,6 +47,8 @@ const props = withDefaults(
     showCloudMatch?: boolean;
     /** 是否启用排序交互 */
     enableSort?: boolean;
+    /** 排序偏好作用域 */
+    sortKey?: SongListSortKey;
     /** 列表来源 */
     source?: TrackSource;
     /** 集合类型 */
@@ -90,6 +80,7 @@ const props = withDefaults(
     showFavorite: true,
     showCloudMatch: false,
     enableSort: false,
+    sortKey: undefined,
     source: "local",
     collectionType: undefined,
     collectionId: undefined,
@@ -107,6 +98,7 @@ const route = useRoute();
 const media = useMediaStore();
 const status = useStatusStore();
 const settings = useSettingsStore();
+const downloadStore = useDownloadStore();
 const fav = useFavorite();
 
 /** 悬浮布局且播放栏可见时 */
@@ -126,21 +118,34 @@ const playingId = computed(() => media.track?.id);
 
 /** 关联集合是否可跳转：本地专辑不要求 id，在线内容需要集合 ID */
 const isRelatedCollectionLinkable = (item: Track): boolean => {
-  if (!item.album?.name) return false;
+  if (!item.album?.name || item.source === "plugin") return false;
   if (props.relatedCollectionType === "radio") return !!item.album.id;
   return item.source === "local" || !!item.album.id;
 };
 
-/** 歌手是否可跳转：本地不要求 id，其他源需要 artist.id */
+/**
+ * 判断曲目的歌手是否可跳转详情
+ * @param item - 列表中的曲目
+ * @param artist - 待展示的歌手
+ * @returns 是否提供歌手链接
+ */
 const isArtistLinkable = (item: Track, artist: Artist): boolean => {
-  if (!artist.name) return false;
+  if (!artist.name || item.source === "plugin") return false;
   return item.source === "local" || !!artist.id;
 };
 
-/** 跳转到歌手页 */
+/**
+ * 打开曲目所属来源的歌手详情
+ * @param item - 列表中的曲目
+ * @param artist - 要打开的歌手
+ */
 const goArtist = (item: Track, artist: Artist): void => {
   if (!isArtistLinkable(item, artist)) return;
-  navigateToArtist(artist.name, { source: item.source, artistId: artist.id });
+  navigateToArtist(artist.name, {
+    source: item.source,
+    artistId: artist.id,
+    serverId: item.serverId,
+  });
 };
 
 /** 跳转到关联专辑或播客页面 */
@@ -150,15 +155,44 @@ const goRelatedCollection = (item: Track): void => {
     navigateToPodcast(item.album?.id, item.album?.name);
     return;
   }
-  navigateToAlbum(item.album?.name, { source: item.source, albumId: item.album?.id });
+  navigateToAlbum(item.album?.name, {
+    source: item.source,
+    albumId: item.album?.id,
+    serverId: item.serverId,
+  });
 };
 
 const relatedCollectionLabel = computed(() =>
   t(props.relatedCollectionType === "radio" ? "songList.podcast" : "songList.album"),
 );
 
+/** 未指定作用域时的组件内排序偏好 */
+const localSortPreference = ref<SongListSortPreference>({ field: "none", order: "asc" });
+
+/** 按作用域隔离的排序偏好 */
+const sortPreference = computed<SongListSortPreference>({
+  get: () => (props.sortKey ? status.getSortPreference(props.sortKey) : localSortPreference.value),
+  set: (value) => {
+    if (props.sortKey) status.setSortPreference(props.sortKey, value);
+    else localSortPreference.value = value;
+  },
+});
+
 /** 排序字段 */
-const { sortField, sortOrder } = storeToRefs(status);
+const sortField = computed<SortField>({
+  get: () => sortPreference.value.field,
+  set: (field) => {
+    sortPreference.value = { ...sortPreference.value, field };
+  },
+});
+
+/** 排序方向 */
+const sortOrder = computed<SortOrder>({
+  get: () => sortPreference.value.order,
+  set: (order) => {
+    sortPreference.value = { ...sortPreference.value, order };
+  },
+});
 
 /** 字段文案 key 映射 */
 const sortFieldLabelKeyMap: Record<SortField, string> = {
@@ -237,7 +271,7 @@ const playingIndex = computed(() => {
 /** 按用户选择更新队列并播放歌曲 */
 const playTrack = (item: Track, index: number): void => {
   if (settings.player.singleTrackQueueMode === "replace") {
-    void player.playFrom(sortedItems.value, index, props.playbackContext);
+    void player.playFrom(sortedItems.value, { startIndex: index, context: props.playbackContext });
     return;
   }
   void player.playNow(item, props.playbackContext);
@@ -338,7 +372,10 @@ const onTrackDblClick = (item: Track, index: number): void => {
   if (batch.active.value) return;
   if (route.name === "search") {
     if (settings.player.searchPlayBehavior === "all") {
-      void player.playFrom(sortedItems.value, index, props.playbackContext);
+      void player.playFrom(sortedItems.value, {
+        startIndex: index,
+        context: props.playbackContext,
+      });
     } else {
       void player.playNow(item, props.playbackContext);
     }
@@ -451,7 +488,7 @@ defineExpose({
                 <span>{{ t("songList.batch.addToQueue") }}</span>
               </SButton>
               <SButton
-                v-if="source !== 'local' && settings.system.download.enabled"
+                v-if="source !== 'local' && source !== 'plugin' && settings.system.download.enabled"
                 variant="ghost"
                 size="small"
                 :disabled="batch.selectedCount.value === 0"
@@ -513,7 +550,7 @@ defineExpose({
             <!-- 普通模式 -->
             <div
               v-else
-              class="flex items-center gap-3 pl-3 pr-6 mx-3 h-10 text-sm text-on-surface-variant/60"
+              class="flex items-center gap-3 pl-3 pr-6 mx-3 h-10 border-2 border-solid border-transparent text-sm text-on-surface-variant/60"
             >
               <div v-if="showIndex" class="w-8 shrink-0 flex items-center justify-center">
                 <span>#</span>
@@ -536,7 +573,7 @@ defineExpose({
                   </template>
                   <div class="w-60 flex flex-col gap-3 text-sm">
                     <div class="flex items-center gap-2 text-xs">
-                      <IconArrowUpDown class="size-3.5" />
+                      <IconLucideArrowUpDown class="size-3.5" />
                       <span>{{ t("songList.sort.mode") }}</span>
                     </div>
                     <SRadioGroup v-model:value="sortField" size="small">
@@ -555,7 +592,7 @@ defineExpose({
                     <div class="h-px bg-outline-variant/25" />
 
                     <div class="flex items-center gap-2 text-xs">
-                      <IconArrowUpAz class="size-3.5" />
+                      <IconLucideArrowUpAz class="size-3.5" />
                       <span>{{ t("songList.sort.order") }}</span>
                     </div>
                     <SRadioGroup
@@ -583,8 +620,8 @@ defineExpose({
               </div>
               <div
                 v-if="showCloudMatch || showFavorite"
-                class="shrink-0 text-center"
-                :class="showCloudMatch && showFavorite ? 'w-[60px]' : 'w-7'"
+                class="shrink-0 text-center whitespace-nowrap"
+                :class="showCloudMatch && showFavorite ? 'w-[60px]' : 'w-12'"
               >
                 {{ t("songList.actions") }}
               </div>
@@ -696,29 +733,43 @@ defineExpose({
                     class="text-sm mt-1 truncate flex items-center gap-1"
                     :class="playingId === item.id ? 'text-primary/70' : 'text-on-surface-variant'"
                   >
-                    <span
+                    <STag
+                      v-if="downloadStore.isDownloaded(item)"
+                      type="primary"
+                      variant="soft"
+                      size="tiny"
+                      circle
+                      class="shrink-0"
+                    >
+                      <IconLucideCheck class="size-3" aria-hidden="true" />
+                    </STag>
+                    <STag
                       v-if="item.quality && !settings.preset.hideQualityTag"
-                      class="shrink-0 px-1 rounded text-[10px] leading-[18px] font-bold border border-solid"
-                      :class="
-                        isLosslessQuality(item.quality)
-                          ? 'text-amber-500 border-amber-500/40'
-                          : 'text-on-surface-variant border-on-surface-variant/40'
-                      "
+                      :type="isLosslessQuality(item.quality) ? 'warning' : 'default'"
+                      variant="outline"
+                      size="tiny"
+                      class="shrink-0"
                     >
                       {{ getQualityLabel(item.quality) }}
-                    </span>
-                    <span
+                    </STag>
+                    <STag
                       v-if="item.fee === 1 && !settings.preset.hideVipTag"
-                      class="shrink-0 px-1 rounded text-[10px] leading-[18px] font-bold border border-solid text-red-400 border-red-400/40"
+                      type="error"
+                      variant="outline"
+                      size="tiny"
+                      class="shrink-0"
                     >
                       VIP
-                    </span>
-                    <span
+                    </STag>
+                    <STag
                       v-else-if="item.fee === 4 && !settings.preset.hideVipTag"
-                      class="shrink-0 px-1 rounded text-[10px] leading-[18px] font-bold border border-solid text-red-400 border-red-400/40"
+                      type="error"
+                      variant="outline"
+                      size="tiny"
+                      class="shrink-0"
                     >
                       EP
-                    </span>
+                    </STag>
                     <span class="truncate">
                       <template v-for="(artist, i) in item.artists" :key="artist.id ?? i">
                         <span
@@ -789,9 +840,13 @@ defineExpose({
               </div>
               <!-- 云盘匹配与红心：批量模式下隐藏 -->
               <div
-                v-if="(showCloudMatch || showFavorite) && !batch.active.value"
+                v-if="
+                  (showCloudMatch || showFavorite) &&
+                  !batch.active.value &&
+                  item.source !== 'plugin'
+                "
                 class="shrink-0 flex items-center justify-center"
-                :class="showCloudMatch && showFavorite ? 'w-[60px]' : 'w-7'"
+                :class="showCloudMatch && showFavorite ? 'w-[60px]' : 'w-12'"
                 @click.stop
               >
                 <SButton
@@ -816,12 +871,13 @@ defineExpose({
                   circle
                   :size="28"
                   :icon-size="20"
+                  :disabled="!fav.isSupported(item)"
                   @click="fav.toggle(item)"
                 >
                   <template #icon>
                     <SIconSwap :active="fav.isLiked(item)">
-                      <template #on><IconFavorite /></template>
-                      <template #off><IconFavoriteOutline /></template>
+                      <template #on><IconMaterialSymbolsFavoriteRounded /></template>
+                      <template #off><IconMaterialSymbolsFavoriteOutlineRounded /></template>
                     </SIconSwap>
                   </template>
                 </SButton>
@@ -829,7 +885,7 @@ defineExpose({
               <div
                 v-else-if="showCloudMatch || showFavorite"
                 class="shrink-0"
-                :class="showCloudMatch && showFavorite ? 'w-[60px]' : 'w-7'"
+                :class="showCloudMatch && showFavorite ? 'w-[60px]' : 'w-12'"
               />
               <!-- 时长 -->
               <div

@@ -6,6 +6,8 @@
  */
 
 import type { DownloadTask, DownloadProgress } from "@shared/types/download";
+import type { Track } from "@shared/types/player";
+import { initDownloadResolver } from "@/services/download/resolver";
 
 export const useDownloadStore = defineStore("download", () => {
   /** 内存中保留的已结束任务上限（进行中任务始终完整保留） */
@@ -36,6 +38,20 @@ export const useDownloadStore = defineStore("download", () => {
         .length,
   );
 
+  // 流媒体曲目的 id 已包含服务器 ID，可与在线歌曲共用来源和 ID 匹配
+  const activeTasks = computed(() => tasks.value.filter(isOngoing));
+  const historyTasks = computed(() => tasks.value.filter((task) => !isOngoing(task)));
+  const downloadedIds = computed(() => {
+    const ids = new Set<string>();
+    for (const task of historyTasks.value) {
+      if (task.status === "done" && task.filePath) ids.add(`${task.track.source}:${task.track.id}`);
+    }
+    return ids;
+  });
+
+  const isDownloaded = (track: Track): boolean =>
+    downloadedIds.value.has(`${track.source}:${track.id}`);
+
   /** 替换或插入一条任务 */
   const applyTask = (task: DownloadTask): void => {
     pendingCancelHandlers.delete(task.taskId);
@@ -59,6 +75,7 @@ export const useDownloadStore = defineStore("download", () => {
   const init = async (): Promise<void> => {
     if (initialized.value) return;
     initialized.value = true;
+    unsubscribers.push(initDownloadResolver());
     unsubscribers.push(window.api.download.onState(applyTask));
     unsubscribers.push(window.api.download.onProgress(applyProgress));
     const remoteTasks = await window.api.download.list();
@@ -146,7 +163,10 @@ export const useDownloadStore = defineStore("download", () => {
 
   return {
     tasks,
+    activeTasks,
+    historyTasks,
     activeCount,
+    isDownloaded,
     init,
     addPending,
     activatePending,

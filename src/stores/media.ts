@@ -1,5 +1,7 @@
 import type { MediaInfo, PlaybackContext, Track, TrackDetail } from "@shared/types/player";
-import type { LyricData, LyricFormat, LyricInput, LyricLine } from "@shared/types/lyrics";
+import type { LyricFormat, LyricInput, LyricLine } from "lyric-kit";
+import type { LyricData } from "@shared/types/lyrics";
+
 import { useSettingsStore } from "@/stores/settings";
 import { watchLyricPreference } from "@/services/lyric/loader";
 import {
@@ -7,8 +9,8 @@ import {
   extractLyricAuthors,
   findLyricIndex,
   normalizeLyricLines,
-  parseLyric,
 } from "lyric-kit";
+import { parseLyric } from "@/utils/lyric/parse";
 import { applyLyricExclude } from "@/utils/lyric/lyricStripper";
 import { applyLyricCjkTransform } from "@/utils/lyric/cjkTransform";
 

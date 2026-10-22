@@ -2,7 +2,7 @@ use super::*;
 
 #[napi]
 impl AudioPlayer {
-    /// 恢复播放。如果已停止或播放结束，自动从头重新加载
+    /// 恢复播放；如果已停止或播放结束，自动从头重新加载
     #[napi]
     pub async fn play(&self) -> Result<()> {
         let (revival_source, position) = {
@@ -13,7 +13,7 @@ impl AudioPlayer {
         };
         if let Some(source) = revival_source {
             let is_remote = source.starts_with("http://") || source.starts_with("https://");
-            if let Err(e) = self.load(source, Some(true)).await {
+            if let Err(e) = self.load(source, Some(true), None).await {
                 // 复活加载被更新的 load/stop 取代不是错误：已有更新的操作接管播放
                 if is_cancelled_napi_error(&e) {
                     return Ok(());
@@ -198,8 +198,8 @@ impl AudioPlayer {
         JsFftData { ldata, rdata }
     }
 
-    /// 返回 load 时缓存的原始封面数据（用于 SMTC / 全屏播放器）。
-    /// 封面在 load 阶段从已打开的 FFmpeg 上下文一次性提取，不再重复打开文件。
+    /// 返回 load 时缓存的原始封面数据（用于 SMTC / 全屏播放器）
+    /// 封面在 load 阶段从已打开的 FFmpeg 上下文一次性提取，不再重复打开文件
     #[napi]
     pub fn get_cover_raw(&self) -> Option<napi::bindgen_prelude::Buffer> {
         let player = self.inner.lock();

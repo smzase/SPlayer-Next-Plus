@@ -79,6 +79,7 @@ onBeforeUnmount(clearFallbackTimer);
     />
     <img
       v-if="src"
+      data-cover-image
       :src="src"
       :alt="alt"
       class="absolute inset-0 z-1 h-full w-full object-cover transition-opacity duration-200"

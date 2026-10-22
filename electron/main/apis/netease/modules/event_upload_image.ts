@@ -5,7 +5,8 @@
 import { fetchWithProxy } from "@main/utils/proxy";
 import { cookieObjToString, cookieToJson } from "../core/cookie";
 import { createOption } from "../core/option";
-import type { NeteaseModule, RequestResponse } from "../core/types";
+import type { NeteaseModule } from "../core/types";
+import type { RequestResponse } from "../core/response";
 
 const IMAGE_BUCKET = "yyimgs";
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -41,8 +42,7 @@ const eventUploadImage: NeteaseModule = async (query, request) => {
     createOption(query, "weapi"),
   );
   const result = tokenResponse.body.result as
-    | { docId?: unknown; objectKey?: unknown; token?: unknown }
-    | undefined;
+    { docId?: unknown; objectKey?: unknown; token?: unknown } | undefined;
   const objectKey = String(result?.objectKey || "");
   const token = String(result?.token || "");
   const imageId = String(result?.docId || "");

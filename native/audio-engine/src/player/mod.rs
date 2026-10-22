@@ -16,7 +16,9 @@ use crate::output::playback::PlaybackHandle;
 use crate::output::{AudioOutput, ExclusiveFallbackCallback, OutputFailureCallback};
 
 mod background;
+mod crossfade;
 mod events;
+pub(crate) mod preload;
 mod transition;
 
 #[cfg(test)]
@@ -26,6 +28,9 @@ pub use transition::{LoadedPlayback, SeekTake};
 
 /// 内部播放器，管理音频输出、解码和状态
 pub struct InnerPlayer {
+    pub(crate) preload: preload::PreloadSlot,
+    transitioning: Arc<AtomicBool>,
+    transition_dsp: Option<crossfade::TransitionDsp>,
     /// 输出设备与配置句柄（不持有流），保证 InnerPlayer 整体是 Send 的
     output: Option<AudioOutput>,
     /// 使用 Arc 包装，允许 fade 线程在 Mutex 外操作音量
@@ -75,7 +80,7 @@ pub struct InnerPlayer {
     /// commit_loaded 比对 token 与最新值，不一致则该次加载已被新加载取代，需丢弃
     /// 用于防止快速切歌时旧 IO 完成后覆盖新音频的竞态
     load_token: Arc<AtomicU64>,
-    /// 当前输出流代次。错误回调仅允许上报与此值一致的输出，避免旧流销毁后的迟到事件重建新流。
+    /// 当前输出流代次；错误回调仅允许上报与此值一致的输出，避免旧流销毁后的迟到事件重建新流
     output_generation: Arc<AtomicU64>,
     /// 当前音频源的原始采样率
     original_sample_rate: u32,
@@ -88,14 +93,14 @@ pub struct InnerPlayer {
 }
 
 /// 编译期保证 `InnerPlayer: Send`：cpal::Stream 由 `PlaybackHandle` 持有且各后端均为 Send，
-/// 此处不再需要 `unsafe impl Send`。如果未来有人加了 !Send 字段，这条断言会编译失败提醒。
+/// 此处不再需要 `unsafe impl Send`；如果未来有人加了 !Send 字段，这条断言会编译失败提醒
 const _: fn() = || {
     fn assert_send<T: Send>() {}
     assert_send::<InnerPlayer>();
 };
 
 impl InnerPlayer {
-    /// 获取输出流使用的频谱分析器。
+    /// 获取输出流使用的频谱分析器
     pub fn fft_handle(&self) -> Arc<FftAnalyzer> {
         Arc::clone(&self.fft)
     }
@@ -129,7 +134,7 @@ impl InnerPlayer {
         })
     }
 
-    /// 预留下一代输出流，并立即使旧输出的回调失效。
+    /// 预留下一代输出流，并立即使旧输出的回调失效
     pub fn reserve_output_generation(&self) -> u64 {
         self.output_generation.fetch_add(1, Ordering::AcqRel) + 1
     }
@@ -141,6 +146,9 @@ impl InnerPlayer {
         debug!("InnerPlayer 已创建");
 
         Ok(Self {
+            preload: preload::PreloadSlot::default(),
+            transitioning: Arc::new(AtomicBool::new(false)),
+            transition_dsp: None,
             output,
             playback: None,
             shared: None,
@@ -218,6 +226,20 @@ impl InnerPlayer {
         }
     }
 
+    /// 向应用推送实际输出回调的交叉过渡状态
+    pub fn emit_transition_state(
+        &self,
+        active: bool,
+        reason: Option<&str>,
+        fade_seconds: Option<f64>,
+    ) {
+        self.emit(PlayerEvent::TransitionChanged {
+            active,
+            reason: reason.map(str::to_owned),
+            fade_seconds,
+        });
+    }
+
     /// 对外发 SourceError：供 NAPI 绑定层在远端源重开失败时通知 JS 重新解析
     pub fn emit_source_error(&self) {
         self.emit(PlayerEvent::SourceError);
@@ -243,7 +265,7 @@ impl InnerPlayer {
         self.current_source.as_deref()
     }
 
-    /// 恢复播放。Paused 时渐入恢复；Stopped/Idle/已播完时返回 Some(source)，
+    /// 恢复播放；Paused 时渐入恢复；Stopped/Idle/已播完时返回 Some(source)，
     /// 由 NAPI 绑定层走 async load 复活——网络源的打开可达数秒，不能在锁内同步执行
     pub fn play(&mut self) -> Result<Option<String>> {
         // 如果当前在"播放"状态但实际已结束，先标记为停止
@@ -336,7 +358,7 @@ impl InnerPlayer {
 
     /// 恢复失败后保留当前曲目与位置，播放器进入暂停态
     ///
-    /// 不转 Stopped（避免 JS 按"播放结束"自动切歌），等待有限重试或用户手动操作。
+    /// 不转 Stopped（避免 JS 按"播放结束"自动切歌），等待有限重试或用户手动操作
     pub fn enter_paused_for_recovery(&mut self) {
         if self.state != PlayerState::Paused {
             self.state = PlayerState::Paused;
@@ -350,6 +372,7 @@ impl InnerPlayer {
     /// 显式停止：清掉 current_source，避免后续 play() 在 Stopped 态下用残留源复活上一首
     /// （`stop_internal` 是内部过渡用，不清；load() 会立即用新源覆盖）
     pub fn stop(&mut self) {
+        self.preload.clear();
         // 使在途的 async load/seek 在 commit 时被拒绝，防止 stop 后被复活
         self.load_token.fetch_add(1, Ordering::AcqRel);
         if let Some(handle) = self.pending_load_handle.take() {
@@ -364,6 +387,8 @@ impl InnerPlayer {
     }
 
     fn stop_internal(&mut self) {
+        self.transitioning.store(false, Ordering::Release);
+        self.transition_dsp = None;
         // 1. 取消渐变并等待渐变线程退出（释放 Arc<Sink>）
         self.cancel_fade();
         // 2. 停止定时器并等待线程退出（释放 Arc<Shared> 和 Arc<EventEmitter>）
@@ -452,6 +477,9 @@ impl InnerPlayer {
     /// 设置音量归一化开关
     pub fn set_normalization_enabled(&mut self, enabled: bool) {
         self.normalization_enabled = enabled;
+        if let Some(next) = &self.transition_dsp {
+            next.shared.set_normalization_enabled(enabled);
+        }
         if let Some(ref shared) = self.shared {
             shared.set_normalization_enabled(enabled);
         }
@@ -465,6 +493,9 @@ impl InnerPlayer {
     /// 设置均衡器开关
     pub fn set_equalizer_enabled(&mut self, enabled: bool) {
         self.equalizer.lock().set_enabled(enabled);
+        if let Some(next) = &self.transition_dsp {
+            next.equalizer.lock().set_enabled(enabled);
+        }
     }
 
     /// 获取均衡器开关状态
@@ -475,6 +506,9 @@ impl InnerPlayer {
     /// 更新所有频段增益（dB），长度需为 EQ_BAND_COUNT
     pub fn set_equalizer_bands(&mut self, gains_db: &[f32]) {
         self.equalizer.lock().set_band_gains(gains_db);
+        if let Some(next) = &self.transition_dsp {
+            next.equalizer.lock().set_band_gains(gains_db);
+        }
     }
 
     /// 获取所有频段当前增益（dB）
@@ -485,6 +519,9 @@ impl InnerPlayer {
     /// 设置前级增益（dB，自动 clamp 到 ±12）
     pub fn set_preamp_gain(&mut self, db: f32) {
         self.equalizer.lock().set_preamp_db(db);
+        if let Some(next) = &self.transition_dsp {
+            next.equalizer.lock().set_preamp_db(db);
+        }
     }
 
     /// 获取前级增益（dB）
@@ -495,17 +532,29 @@ impl InnerPlayer {
     /// 设置播放速度（自动 clamp 到 [0.5, 2.0]）
     pub fn set_speed(&mut self, speed: f32) {
         self.tempo.lock().set_speed(speed);
+        if let Some(next) = &self.transition_dsp {
+            next.tempo.lock().set_speed(speed);
+            if let Some(playback) = &self.playback {
+                playback.set_transition_speed(self.speed() / next.initial_speed);
+            }
+        }
     }
 
-    /// 设置音调偏移（半音，自动 clamp 到 [-12, 12]）。
+    /// 设置音调偏移（半音，自动 clamp 到 [-12, 12]）
     /// sync=ON 时立即下发；sync=OFF 时只更新内部值，不影响声音
     pub fn set_pitch(&mut self, semitones: i8) {
         self.tempo.lock().set_pitch(semitones);
+        if let Some(next) = &self.transition_dsp {
+            next.tempo.lock().set_pitch(semitones);
+        }
     }
 
     /// 设置"音调同步"开关（true = 变速保音调，默认）
     pub fn set_pitch_sync(&mut self, sync: bool) {
         self.tempo.lock().set_pitch_sync(sync);
+        if let Some(next) = &self.transition_dsp {
+            next.tempo.lock().set_pitch_sync(sync);
+        }
     }
 
     /// 获取当前播放速度

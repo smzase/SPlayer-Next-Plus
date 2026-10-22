@@ -1,5 +1,4 @@
-import type { Track } from "@shared/types/player";
-import type { ShuffleMode } from "@/stores/status";
+import type { ShuffleMode, Track } from "@shared/types/player";
 import { shouldSkipDjTrack } from "@/utils/preset/djMode";
 import { shouldSkipKeywordTrack } from "@/utils/preset/skipKeywords";
 

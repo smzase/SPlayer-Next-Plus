@@ -2,6 +2,7 @@
 import type { PlaybackContext, Track, TrackSource } from "@shared/types/player";
 import type { CollectionCommentTarget } from "@shared/types/comment";
 import type { Collection, CollectionType } from "@/types/collection";
+import type { SongListSortKey } from "@/types/list";
 import type { DropdownMenuItem } from "@/components/ui/SDropdownMenu.vue";
 import { loadCollection as loadCollectionService } from "@/services/collection";
 import { fetchPodcastPrograms, searchPodcastPrograms } from "@/apis/podcast/netease";
@@ -13,6 +14,7 @@ import { useStatusStore } from "@/stores/status";
 import SongList from "@/components/list/SongList.vue";
 import { formatTime } from "@/utils/time";
 import { getCollectionShareUrl } from "@/utils/format/shareUrl";
+import { coverTransitionActive, getCoverPreview } from "@/services/coverTransition";
 import * as player from "@/core/player";
 import IconLucidePencil from "~icons/lucide/pencil";
 import IconLucideTrash2 from "~icons/lucide/trash-2";
@@ -43,7 +45,16 @@ const source = route.params.source as TrackSource;
 const type = route.params.type as CollectionType;
 const id = route.params.id as string;
 
+/** 按合集类型隔离排序偏好 */
+const sortKey = computed<SongListSortKey>(() => `collection.${type}`);
+
 const collection = shallowRef<Collection | null>(null);
+const preview = getCoverPreview(route.fullPath);
+/** 首屏头部只复用轻量摘要，不将预览数据交给播放和歌单管理逻辑 */
+const header = computed(() => collection.value ?? preview);
+const coverSource = computed(() =>
+  coverTransitionActive.value && preview ? preview.cover : (header.value?.cover ?? preview?.cover),
+);
 /** 正在加载 */
 const loading = ref(false);
 const loadError = ref("");
@@ -170,7 +181,7 @@ const handleListScroll = (event: Event) => {
   }
 };
 
-/** 加载数据 */
+/** 加载当前服务器的合集详情，并作废上一轮请求 */
 const loadCollection = async (): Promise<void> => {
   collapsed.value = false;
   cancelDescriptionAnimations();
@@ -186,9 +197,11 @@ const loadCollection = async (): Promise<void> => {
   const myAbort = new AbortController();
   loadAbort = myAbort;
   loading.value = true;
+  collection.value = null;
 
   try {
     await loadCollectionService(source, type, id, {
+      serverId: typeof route.query.serverId === "string" ? route.query.serverId : undefined,
       fallbackName: typeof route.query.name === "string" ? route.query.name : undefined,
       signal: myAbort.signal,
       onUpdate: (next) => {
@@ -395,7 +408,7 @@ const handleComments = (): void => {
 
 const handlePlayAll = () => {
   if (!collection.value?.tracks.length) return;
-  player.playFrom(collection.value.tracks, 0, playbackContext.value);
+  player.playFrom(collection.value.tracks, { context: playbackContext.value });
 };
 
 /** 歌曲列表引用 */
@@ -484,9 +497,7 @@ const handleMoreMenu = async (key: string): Promise<void> => {
   }
 };
 
-onMounted(() => {
-  loadCollection();
-});
+watch(() => route.query.serverId, loadCollection, { immediate: true });
 
 onBeforeUnmount(() => {
   loadAbort?.abort();
@@ -498,15 +509,17 @@ onBeforeUnmount(() => {
 <template>
   <div class="flex flex-col h-full">
     <!-- 头部信息 -->
-    <div v-if="collection" class="shrink-0 px-5 pb-2">
+    <div v-if="header" class="shrink-0 px-5 pb-2">
       <div
         class="flex mt-2 transition-[gap,margin] duration-300"
         :class="collapsed ? 'gap-3' : 'gap-5'"
       >
         <!-- 封面 -->
-        <SImg
-          :src="collection.cover"
-          :alt="collection.title"
+        <DetailCover
+          :src="coverSource"
+          :fallback="preview?.cover"
+          :alt="header.title"
+          data-cover-hero
           class="rounded-xl shrink-0 transition-[width,height] duration-300"
           :class="collapsed ? 'size-20' : 'size-40'"
         />
@@ -521,7 +534,7 @@ onBeforeUnmount(() => {
                 class="min-w-0 flex-1 font-bold text-on-surface truncate lh-normal transition-[font-size,line-height] duration-300"
                 :class="collapsed ? 'text-xl' : 'text-3xl'"
               >
-                {{ collection.title }}
+                {{ header.title }}
               </h1>
               <div
                 class="flex shrink-0 items-center gap-1 text-primary"
@@ -566,10 +579,10 @@ onBeforeUnmount(() => {
                         : 'truncate pr-10'
                     "
                   >
-                    {{ collection.description || t("collection.noDescription") }}
+                    {{ collection?.description || t("collection.noDescription") }}
                   </p>
                   <button
-                    v-if="collection.description && (descriptionExpandable || descriptionExpanded)"
+                    v-if="collection?.description && (descriptionExpandable || descriptionExpanded)"
                     ref="descriptionButtonRef"
                     type="button"
                     class="appearance-none absolute p-0 border-0 bg-transparent text-primary font-medium cursor-pointer transition-opacity duration-150 hover:opacity-70 disabled:pointer-events-none"
@@ -594,9 +607,9 @@ onBeforeUnmount(() => {
                     type="button"
                     class="flex min-w-0 items-center gap-1 border-0 bg-transparent p-0 text-inherit transition-colors"
                     :class="
-                      collection.creatorId ? 'cursor-pointer hover:text-primary' : 'cursor-default'
+                      collection?.creatorId ? 'cursor-pointer hover:text-primary' : 'cursor-default'
                     "
-                    :disabled="!collection.creatorId"
+                    :disabled="!collection?.creatorId"
                     @click="openCreator"
                   >
                     <IconLucideUser class="shrink-0" />
@@ -625,7 +638,7 @@ onBeforeUnmount(() => {
                 type="primary"
                 variant="secondary"
                 round
-                :disabled="collection.tracks.length === 0"
+                :disabled="!collection?.tracks.length"
                 @click="handlePlayAll"
               >
                 <template #icon>
@@ -659,7 +672,7 @@ onBeforeUnmount(() => {
                 {{ t("comments.action") }}
               </SButton>
               <SDropdownMenu
-                v-if="moreMenuItems.length > 0"
+                v-if="collection && moreMenuItems.length > 0"
                 :items="moreMenuItems"
                 align="start"
                 @select="handleMoreMenu"
@@ -712,6 +725,7 @@ onBeforeUnmount(() => {
           :loading-more="
             type === 'radio' && (searchQuery.trim() ? podcastSearchLoading : podcastLoadingMore)
           "
+          :sort-key="sortKey"
           enable-sort
           @scroll="handleListScroll"
           @reach-bottom="loadMorePodcastPrograms"

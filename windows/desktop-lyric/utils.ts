@@ -1,4 +1,5 @@
-import type { LyricLine } from "@shared/types/lyrics";
+import type { LyricLine } from "lyric-kit";
+
 import type { DesktopLyricAlign, DesktopLyricSettings } from "@shared/types/settings";
 
 import { hasRealWordTiming } from "@shared/utils/lyricSync";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { NeteaseDjProgram, NeteaseDjRadio } from "@/types/netease";
+import type { NeteaseDjProgram, NeteaseDjRadio } from "@shared/types/platform/netease";
 import { podcastProgramToTrack, podcastToCoverItem, toPodcast } from "./podcast";
 
 const radio: NeteaseDjRadio = {

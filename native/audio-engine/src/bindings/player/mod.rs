@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::thread::JoinHandle;
 
 use ffmpeg_audio::HttpCancelHandle;
 use napi::bindgen_prelude::*;
@@ -23,7 +22,7 @@ fn is_cancelled_napi_error(error: &Error) -> bool {
     error.reason.starts_with("[Cancelled]")
 }
 
-/// NAPI 错误由 `IntoNapiResult` 以稳定类别前缀编码，恢复路径据此避免把设备失败误报为音源失效。
+/// NAPI 错误由 `IntoNapiResult` 以稳定类别前缀编码，恢复路径据此避免把设备失败误报为音源失效
 fn is_device_napi_error(error: &Error) -> bool {
     error.reason.starts_with("[Device]")
 }
@@ -49,7 +48,10 @@ mod controls;
 mod device;
 mod events;
 mod load;
+mod preload;
 mod seek;
+mod tail;
+mod transition;
 mod types;
 pub use types::*;
 

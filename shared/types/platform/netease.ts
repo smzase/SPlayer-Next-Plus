@@ -1,7 +1,7 @@
 import type { TrackFee } from "@shared/types/player";
 
 /**
- * 网易云接口原始数据类型
+ * NCM 接口原始数据类型
  */
 
 /** 歌手 */
@@ -84,7 +84,7 @@ export interface NeteasePrivilege {
 }
 
 /**
- * 网易云歌曲对象
+ * NCM 歌曲对象
  */
 export interface NeteaseSong {
   id: number;

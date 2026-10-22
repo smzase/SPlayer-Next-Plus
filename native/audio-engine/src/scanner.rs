@@ -109,7 +109,7 @@ fn collect_removed_paths(
 /// 新 API 下 AudioReader 不再要求重采样参数，扫库每文件省一次 SwrContext 分配
 pub(crate) fn probe_fast(path: &str, cover_cache_dir: Option<&str>) -> Option<ScannedTrack> {
     let file = fs::File::open(path).ok()?;
-    let reader = AudioReader::new(file).ok()?;
+    let reader = AudioReader::new(crate::decoder::input::AudioInput::new(file).ok()?).ok()?;
 
     let duration = reader.duration().map(|d| d.as_secs_f64()).unwrap_or(0.0);
 

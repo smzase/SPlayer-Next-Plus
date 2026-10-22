@@ -69,7 +69,7 @@ const playTrack = (index: number): void => {
   const track = props.items[index]?.track;
   if (!track) return;
   if (settings.player.singleTrackQueueMode === "replace") {
-    void player.playFrom(tracks.value, index);
+    void player.playFrom(tracks.value, { startIndex: index });
     return;
   }
   void player.playNow(track);

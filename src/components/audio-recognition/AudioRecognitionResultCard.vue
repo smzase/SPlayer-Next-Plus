@@ -5,13 +5,13 @@ import {
   defaultKeywords,
   defaultRegexes,
   normalizeLyricLines,
-  parseLyric,
   pickLatestStartedIndex,
   stripLyricMetadata,
 } from "lyric-kit";
 import AudioRecognitionLyricText from "./AudioRecognitionLyricText.vue";
 import { requestPlatformLyric } from "@/services/lyric/request";
 import { getLineText } from "@shared/utils/lyrics";
+import { parseLyric } from "@/utils/lyric/parse";
 import { formatTime } from "@/utils/time";
 import { navigateToAlbum, navigateToArtist } from "@/utils/navigate";
 import { useSettingsStore } from "@/stores/settings";

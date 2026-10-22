@@ -74,7 +74,7 @@ watch(
 );
 
 const playAll = (): void => {
-  if (currentTracks.value.length) player.playFrom(currentTracks.value, 0);
+  if (currentTracks.value.length) player.playFrom(currentTracks.value);
 };
 </script>
 

@@ -42,7 +42,7 @@ const playResult = (result: AudioRecognitionResult, index: number): void => {
   if (settings.player.singleTrackQueueMode === "replace") {
     void player.playFrom(
       results.value.map((item) => item.track),
-      index,
+      { startIndex: index },
     );
     return;
   }

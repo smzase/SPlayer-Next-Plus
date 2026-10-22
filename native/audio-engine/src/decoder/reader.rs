@@ -1,3 +1,4 @@
+use super::input::AudioInput;
 use super::*;
 
 impl DecoderData {
@@ -39,13 +40,13 @@ pub(super) fn open_source(
 ) -> Result<(AudioReader, Option<HttpCancelHandle>)> {
     let (reader, cancel) = if source.starts_with("http://") || source.starts_with("https://") {
         let http = HttpAudioSource::new_with_cancel_handle(source, &cancel_handle)?;
-        let reader =
-            AudioReader::new(http).with_context(|| format!("打开网络音频失败: {source}"))?;
+        let reader = AudioReader::new(AudioInput::new(http)?)
+            .with_context(|| format!("打开网络音频失败: {source}"))?;
         (reader, Some(cancel_handle))
     } else {
         let file = File::open(source).with_context(|| format!("打开本地文件失败: {source}"))?;
-        let reader =
-            AudioReader::new(file).with_context(|| format!("打开本地音频失败: {source}"))?;
+        let reader = AudioReader::new(AudioInput::new(file)?)
+            .with_context(|| format!("打开本地音频失败: {source}"))?;
         (reader, None)
     };
 

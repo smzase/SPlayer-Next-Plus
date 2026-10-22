@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Track } from "@shared/types/player";
-import { neteaseScrobbleThresholdMs, toNeteaseScrobbleTrack } from "@shared/utils/neteaseScrobble";
+import { toNeteaseScrobbleTrack } from "@shared/utils/neteaseScrobble";
 
 const track: Track = {
   id: "123",
@@ -13,20 +13,12 @@ const track: Track = {
 };
 
 describe("网易云听歌打卡元数据", () => {
-  it("短音频也会在播放过半后触发打卡", () => {
-    expect(neteaseScrobbleThresholdMs(15)).toBe(7500);
-    expect(neteaseScrobbleThresholdMs(30)).toBe(15000);
-    expect(neteaseScrobbleThresholdMs(600)).toBe(240000);
-    expect(neteaseScrobbleThresholdMs(0)).toBe(Infinity);
-  });
-
   it("没有播放上下文时以歌曲自身作为来源", () => {
     expect(toNeteaseScrobbleTrack(track, undefined, 180000)).toMatchObject({
       id: "123",
       sourceId: "123",
       sourceType: "song",
       resourceType: "song",
-      fee: 1,
     });
   });
 

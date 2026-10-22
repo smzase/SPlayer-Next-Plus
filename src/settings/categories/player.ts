@@ -1,3 +1,4 @@
+import { useSettingsStore } from "@/stores/settings";
 import type { SettingCategory } from "@/types/settings-schema";
 import { isWin } from "@/utils/config";
 import DeviceSelector from "@/components/settings/custom/DeviceSelector.vue";
@@ -111,6 +112,74 @@ const playerCategory: SettingCategory = {
           type: "switch",
           binding: { store: "settings", path: "player.preloadNextTrack" },
           defaultValue: false,
+          confirm: {
+            when: (next) =>
+              Boolean(next) &&
+              (!useSettingsStore().system.cache.songCache.enabled ||
+                !useSettingsStore().system.cache.songCache.cacheStreaming),
+            titleKey: "settings.confirm.preloadCacheTitle",
+            contentKey: "settings.confirm.preloadCacheContent",
+            type: "warning",
+          },
+          action: async (enabled) => {
+            if (!enabled) {
+              useSettingsStore().player.transitionMode = "none";
+              return;
+            }
+            const settings = useSettingsStore();
+            await settings.setSystem("cache.songCache.enabled", true);
+            await settings.setSystem("cache.songCache.cacheStreaming", true);
+          },
+        },
+      ],
+    },
+    {
+      id: "playbackTransition",
+      items: [
+        {
+          key: "transitionMode",
+          type: "select",
+          binding: { store: "settings", path: "player.transitionMode" },
+          options: [
+            { value: "none", labelKey: "settings.transitionMode.none" },
+            { value: "crossfade", labelKey: "settings.transitionMode.crossfade" },
+          ],
+          defaultValue: "none",
+          confirm: {
+            when: (next) =>
+              next === "crossfade" &&
+              (!useSettingsStore().system.cache.songCache.enabled ||
+                !useSettingsStore().system.cache.songCache.cacheStreaming),
+            titleKey: "settings.confirm.preloadCacheTitle",
+            contentKey: "settings.confirm.preloadCacheContent",
+            type: "warning",
+          },
+          action: async (mode) => {
+            if (mode !== "crossfade") return;
+            const settings = useSettingsStore();
+            settings.player.preloadNextTrack = true;
+            if (!settings.system.cache.songCache.enabled) {
+              await settings.setSystem("cache.songCache.enabled", true);
+            }
+            if (!settings.system.cache.songCache.cacheStreaming) {
+              await settings.setSystem("cache.songCache.cacheStreaming", true);
+            }
+          },
+          children: [
+            {
+              key: "transitionPreference",
+              type: "select",
+              binding: { store: "settings", path: "player.transitionPreference" },
+              options: [
+                { value: "conservative", labelKey: "settings.transitionPreference.conservative" },
+                { value: "standard", labelKey: "settings.transitionPreference.standard" },
+                { value: "eager", labelKey: "settings.transitionPreference.eager" },
+              ],
+              defaultValue: "standard",
+            },
+          ],
+          childrenCondition: () => useSettingsStore().player.transitionMode === "crossfade",
+          hideChildren: true,
         },
       ],
     },
@@ -123,6 +192,12 @@ const playerCategory: SettingCategory = {
           type: "switch",
           binding: { store: "settings", path: "system.system.neteaseScrobbleEnabled" },
           defaultValue: false,
+          confirm: {
+            when: (next) => next === true,
+            titleKey: "settings.confirm.enableTitle",
+            contentKey: "settings.confirm.scrobbleRiskContent",
+            type: "warning",
+          },
           children: [
             {
               key: "neteaseScrobbleMode",

@@ -1,6 +1,79 @@
 use super::*;
 
 #[test]
+fn parked_standby_output_wakes_on_activation_or_cancellation() {
+    for cancel in [false, true] {
+        let shared = Shared::new(1000, 1);
+        shared.set_preloading(true);
+        shared.push_output(AudioChunk {
+            player_samples: vec![0.5; 100],
+            fft_samples: vec![],
+            source_sample_count: 100,
+        });
+        let worker_shared = Arc::clone(&shared);
+        let (send, receive) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            worker_shared.push_output(AudioChunk {
+                player_samples: vec![0.5; 100],
+                fft_samples: vec![],
+                source_sample_count: 100,
+            });
+            send.send(()).unwrap();
+        });
+        assert!(receive.recv_timeout(Duration::from_millis(30)).is_err());
+        if cancel {
+            shared.stop();
+        } else {
+            shared.set_preloading(false);
+            assert!(matches!(shared.try_pop(), PopResult::Chunk(_)));
+        }
+        receive.recv_timeout(Duration::from_secs(1)).unwrap();
+        worker.join().unwrap();
+        shared.stop();
+    }
+}
+
+#[test]
+fn standby_decode_queue_resumes_when_promoted() {
+    let shared = Shared::new(48_000, 2);
+    shared.set_preloading(true);
+    for _ in 0..2 {
+        shared.push(AudioChunk {
+            player_samples: vec![0.0; 128],
+            fft_samples: vec![],
+            source_sample_count: 128,
+        });
+    }
+    let (send, receive) = std::sync::mpsc::channel();
+    let worker_shared = Arc::clone(&shared);
+    let worker = std::thread::spawn(move || {
+        send.send(worker_shared.wait_for_space()).unwrap();
+    });
+    assert!(receive.recv_timeout(Duration::from_millis(20)).is_err());
+    shared.set_preloading(false);
+    assert!(receive.recv_timeout(Duration::from_secs(1)).unwrap());
+    worker.join().unwrap();
+    shared.stop();
+}
+
+#[test]
+fn cancelling_standby_wakes_blocked_decoder() {
+    let shared = Shared::new(48_000, 2);
+    shared.set_preloading(true);
+    for _ in 0..2 {
+        shared.push(AudioChunk {
+            player_samples: vec![0.0; 128],
+            fft_samples: vec![],
+            source_sample_count: 128,
+        });
+    }
+    let worker_shared = Arc::clone(&shared);
+    let worker = std::thread::spawn(move || worker_shared.wait_for_space());
+    shared.stop();
+    assert!(!worker.join().unwrap());
+}
+
+#[test]
 fn sample_buffer_pools_are_bounded() {
     let shared = Shared::new(48_000, 2);
 

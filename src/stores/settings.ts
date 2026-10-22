@@ -107,6 +107,8 @@ export const useSettingsStore = defineStore(
     const appearance = reactive<AppearanceSettings>({
       layoutMode: "default",
       routeTransition: "fade",
+      seamlessTransition: false,
+      reduceMotion: false,
       sidebarCollapsed: false,
       sidebarHoverExpand: false,
       sidebarPlaylistCover: false,
@@ -124,6 +126,11 @@ export const useSettingsStore = defineStore(
       fontFamily: "",
       showPerformanceMonitor: false,
     });
+
+    const systemMotion = usePreferredReducedMotion();
+    const reducedMotion = computed(
+      () => appearance.reduceMotion || systemMotion.value === "reduce",
+    );
 
     /** 播放器 */
     const player = reactive<PlayerSettings>({
@@ -155,6 +162,8 @@ export const useSettingsStore = defineStore(
       snapToLyric: false,
       showLyricInBar: true,
       preloadNextTrack: false,
+      transitionMode: "none",
+      transitionPreference: "standard",
       searchPlayBehavior: "current",
     });
 
@@ -179,6 +188,8 @@ export const useSettingsStore = defineStore(
       cjkTransform: "none",
       adaptiveFontSize: true,
       fontSize: 48,
+      translationFontSizeFollowMain: true,
+      translationFontSize: 24,
       fontWeight: 700,
       lyricBlendMode: "normal",
       fontFamily: "",
@@ -202,6 +213,7 @@ export const useSettingsStore = defineStore(
       springDamping: 15,
       springStiffness: 90,
       alignPosition: 0.35,
+      alignment: "auto",
       wordFadeWidth: 0.5,
       inactiveAlpha: 0.2,
       enableExcludeLyrics: true,
@@ -354,6 +366,7 @@ export const useSettingsStore = defineStore(
     return {
       locale,
       appearance,
+      reducedMotion,
       player,
       preset,
       lyric,
@@ -371,12 +384,19 @@ export const useSettingsStore = defineStore(
       storage: localStorage,
       omit: ["system"],
       afterHydrate: ({ store }) => {
-        const { lyric, appearance, player, preset } = store as unknown as {
+        const { lyric, appearance, preset, player } = store as unknown as {
           lyric: LyricSettings;
           appearance: AppearanceSettings;
           player: PlayerSettings;
           preset: PresetSettings;
         };
+        if (player.transitionMode !== "crossfade") player.transitionMode = "none";
+        if (
+          player.transitionPreference !== "conservative" &&
+          player.transitionPreference !== "eager"
+        ) {
+          player.transitionPreference = "standard";
+        }
         if (typeof lyric.detectBackgroundLyrics !== "boolean") {
           lyric.detectBackgroundLyrics = true;
         }

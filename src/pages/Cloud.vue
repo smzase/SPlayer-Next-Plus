@@ -44,7 +44,7 @@ const playbackContext = computed<PlaybackContext>(() => ({
 
 const handlePlayAll = (): void => {
   if (user.cloudTracks.length === 0) return;
-  player.playFrom(user.cloudTracks, 0, playbackContext.value);
+  player.playFrom(user.cloudTracks, { context: playbackContext.value });
 };
 
 /** 打开云盘歌曲匹配弹窗 */
@@ -174,6 +174,7 @@ watch(
           collection-type="cloud"
           :playback-context="playbackContext"
           show-cloud-match
+          sort-key="cloud"
           enable-sort
           @cloud-match="openMatchDialog"
         />

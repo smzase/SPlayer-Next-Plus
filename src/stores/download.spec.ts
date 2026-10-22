@@ -10,6 +10,7 @@ const downloadApi = {
   clearFinished: vi.fn<() => Promise<void>>(),
   onState: vi.fn(() => vi.fn()),
   onProgress: vi.fn(() => vi.fn()),
+  onResolve: vi.fn(() => vi.fn()),
 };
 
 const createTask = (taskId: string, status: DownloadTask["status"] = "queued"): DownloadTask => ({

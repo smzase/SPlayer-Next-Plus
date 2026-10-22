@@ -1,9 +1,4 @@
-/**
- * Netease API 模块注册表
- *
- * 每新增一个 module，在这里用一行 import + export 接入即可。
- * 运行时通过 `callNetease(name, params)` 按 key 路由。
- */
+/** 注册业务模块，供公共请求入口按名称路由 */
 
 import type { NeteaseModule } from "../core/types";
 
@@ -45,6 +40,7 @@ import user_follows from "./user_follows";
 import user_level from "./user_level";
 import user_playlist from "./user_playlist";
 import user_record from "./user_record";
+import record_recent_song from "./record_recent_song";
 import user_subcount from "./user_subcount";
 import user_audio from "./user_audio";
 
@@ -71,8 +67,8 @@ import event_comment_add from "./event_comment_add";
 import event_comment_delete from "./event_comment_delete";
 import event_publish from "./event_publish";
 import event_upload_image from "./event_upload_image";
+import deviceinfo_center_upload from "./deviceinfo_center_upload";
 
-// 搜索
 import cloudsearch from "./cloudsearch";
 import search from "./search";
 import search_default from "./search_default";
@@ -85,12 +81,10 @@ import search_suggest_pc from "./search_suggest_pc";
 import event_search from "./event_search";
 import audio_match from "./audio_match";
 
-// 歌词
 import lyric from "./lyric";
 import lyric_new from "./lyric_new";
 import cloud_lyric_get from "./cloud_lyric_get";
 
-// 评论
 import comment_music from "./comment_music";
 import comment_hot from "./comment_hot";
 import comment_add from "./comment_add";
@@ -98,7 +92,6 @@ import comment_reply from "./comment_reply";
 import comment_delete from "./comment_delete";
 import comment_like from "./comment_like";
 
-// 播放
 import song_detail from "./song_detail";
 import song_url from "./song_url";
 import song_download_url from "./song_download_url";
@@ -110,14 +103,12 @@ import scrobble_v1 from "./scrobble_v1";
 import recent_play from "./recent_play";
 import recent_play_remove from "./recent_play_remove";
 
-// 每日推荐 / 发现
 import recommend_songs from "./recommend_songs";
 import personalized from "./personalized";
 import recommend_resource from "./recommend_resource";
 import top_artists from "./top_artists";
 import album_new from "./album_new";
 
-// 歌单 / 喜欢
 import playlist_detail from "./playlist_detail";
 import playlist_create from "./playlist_create";
 import playlist_delete from "./playlist_delete";
@@ -128,17 +119,16 @@ import playlist_desc_update from "./playlist_desc_update";
 import playlist_order_update from "./playlist_order_update";
 import likelist from "./likelist";
 import like from "./like";
+import like_v1 from "./like_v1";
+import song_like from "./song_like";
 
-// 专辑
 import album from "./album";
 import album_sub from "./album_sub";
 
-// 歌手
 import artists from "./artists";
 import artist_album from "./artist_album";
 import artist_songs from "./artist_songs";
 
-// 用户收藏
 import album_sublist from "./album_sublist";
 import artist_sub from "./artist_sub";
 import artist_sublist from "./artist_sublist";
@@ -182,6 +172,7 @@ export const modules: Record<string, NeteaseModule> = {
   user_mutualfollow_get,
   user_playlist,
   user_record,
+  record_recent_song,
   user_subcount,
   user_update,
   user_blacklist_update,
@@ -208,6 +199,7 @@ export const modules: Record<string, NeteaseModule> = {
   event_comment_delete,
   event_publish,
   event_upload_image,
+  deviceinfo_center_upload,
 
   cloudsearch,
   search,
@@ -259,6 +251,8 @@ export const modules: Record<string, NeteaseModule> = {
   playlist_order_update,
   likelist,
   like,
+  like_v1,
+  song_like,
 
   album,
   album_sub,

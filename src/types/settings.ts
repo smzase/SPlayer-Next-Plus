@@ -1,9 +1,12 @@
-import type { LyricFormat } from "@shared/types/lyrics";
+import type { LyricFormat } from "lyric-kit";
+
 import { DEFAULT_LYRIC_FORMAT_ORDER as DEFAULT_LYRIC_FORMAT_ORDER_SHARED } from "@shared/types/lyrics";
 import type { Platform } from "@shared/types/platform";
+import type { TransitionPreference } from "@shared/types/player";
 import { ALL_PLATFORMS } from "@shared/types/platform";
 import type { CjkTransformMode } from "@shared/types/opencc";
 import type { QualityLevel } from "@/utils/quality";
+import type { LyricAlignment } from "lyric-dom";
 
 /** 播放器背景类型 */
 export type PlayerBgType = "blur" | "solid" | "animation";
@@ -131,10 +134,14 @@ export interface LyricSettings {
   detectBackgroundLyrics: boolean;
   /** 中文繁简转换模式（基于 OpenCC） */
   cjkTransform: CjkTransformMode;
-  /** 字号自适应窗口大小 */
+  /** 字号随窗口高度调整 */
   adaptiveFontSize: boolean;
-  /** 歌词字号（px，自适应关闭时生效） */
+  /** 歌词主行字号（px） */
   fontSize: number;
+  /** 副行字号跟随主行 */
+  translationFontSizeFollowMain: boolean;
+  /** 翻译/音译独立字号（px） */
+  translationFontSize: number;
   /** 歌词字重（100~900） */
   fontWeight: number;
   /** 歌词混合模式 */
@@ -181,6 +188,8 @@ export interface LyricSettings {
   springStiffness: number;
   /** 激活行对齐位置（0~1） */
   alignPosition: number;
+  /** 歌词水平对齐方式 */
+  alignment: LyricAlignment;
   /** 逐字掩码渐变宽度 */
   wordFadeWidth: number;
   /** 非激活行透明度 */
@@ -271,6 +280,10 @@ export interface PlayerSettings {
   showLyricInBar: boolean;
   /** 播放时提前获取下一首的播放数据 */
   preloadNextTrack: boolean;
+  /** 相邻曲目的播放过渡方式 */
+  transitionMode: "none" | "crossfade";
+  /** 曲尾交接时机与淡化时长偏好 */
+  transitionPreference: TransitionPreference;
   /** 搜索页播放行为 */
   searchPlayBehavior: SearchPlayBehavior;
 }
@@ -281,6 +294,10 @@ export interface AppearanceSettings {
   layoutMode: LayoutMode;
   /** 路由切换动效 */
   routeTransition: RouteTransition;
+  /** 页面之间的共享元素过渡 */
+  seamlessTransition: boolean;
+  /** 减弱界面动画 */
+  reduceMotion: boolean;
   /** 侧边栏折叠 */
   sidebarCollapsed: boolean;
   /** 侧边栏平时折叠，悬停时临时展开 */

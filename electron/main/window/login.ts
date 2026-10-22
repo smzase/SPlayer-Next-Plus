@@ -10,6 +10,7 @@
 import { BrowserWindow, session } from "electron";
 import { getMainWindow } from "./main";
 import { coreLog } from "@main/utils/logger";
+import { t } from "@main/utils/i18n";
 
 const LOGIN_PARTITION = "persist:netease-login";
 const LOGIN_URL = "https://music.163.com/#/login";
@@ -81,7 +82,7 @@ export const openNeteaseLoginWindow = async (): Promise<Record<string, string> |
     minWidth: 800,
     minHeight: 600,
     center: true,
-    title: "登录网易云音乐",
+    title: t("loginNetease"),
     autoHideMenuBar: true,
     backgroundColor: "#ffffff",
     show: false,

@@ -16,20 +16,22 @@ describe("网易云原版日志听歌打卡", () => {
   ])("将 %s 来源的 %s 资源映射为官方 %s 类型", async (sourceType, resourceType, expected) => {
     const request = createRequest();
 
-    await scrobble(
-      {
-        id: resourceType === "dj" ? "3081133072" : "123",
-        sourceid: "456",
-        sourceType,
-        resourceType,
-        time: 60,
-        total: 180,
-        fee: 1,
-        categoryId: resourceType === "dj" ? 7 : undefined,
-        cookie: {},
-      } satisfies Query,
-      request as unknown as RequestFn,
-    );
+    for (const action of ["startPlay", "play"])
+      await scrobble(
+        {
+          action,
+          id: resourceType === "dj" ? "3081133072" : "123",
+          sourceid: "456",
+          sourceType,
+          resourceType,
+          time: 60,
+          total: 180,
+          fee: 1,
+          categoryId: resourceType === "dj" ? 7 : undefined,
+          cookie: {},
+        } satisfies Query,
+        request as unknown as RequestFn,
+      );
 
     expect(request).toHaveBeenCalledTimes(2);
     const startplayData = request.mock.calls[0]?.[1] as { logs: string };
@@ -61,18 +63,16 @@ describe("网易云原版日志听歌打卡", () => {
     });
   });
 
-  it("任一原版日志请求失败时返回失败状态", async () => {
-    const request = vi
-      .fn()
-      .mockResolvedValueOnce({ status: 200, body: { code: 200 }, cookie: [] })
-      .mockResolvedValueOnce({ status: 500, body: { code: 500 }, cookie: [] });
+  it("单次原版日志失败时原样返回错误，不伪造成功", async () => {
+    const request = vi.fn().mockResolvedValueOnce({ status: 500, body: { code: 500 }, cookie: [] });
 
     const result = await scrobble(
       { id: "123", sourceid: "123", time: 60, cookie: {} } satisfies Query,
       request as unknown as RequestFn,
     );
 
-    expect(result.status).toBe(502);
-    expect(result.body).toMatchObject({ code: 502, msg: "原版日志上报失败" });
+    expect(result.status).toBe(500);
+    expect(result.body).toMatchObject({ code: 500 });
+    expect(request).toHaveBeenCalledOnce();
   });
 });

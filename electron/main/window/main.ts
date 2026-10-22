@@ -1,4 +1,4 @@
-import { BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, dialog, shell } from "electron";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
 import { createWindow } from "./create";
@@ -12,6 +12,8 @@ import { broadcast } from "@main/utils/broadcast";
 import { isWin } from "@main/utils/config";
 import { CURRENT_AGREEMENT_VERSION } from "@shared/constants/agreement";
 import { setTaskbarLyricMainWindowVisible } from "./taskbarLyric";
+import { coreLog } from "@main/utils/logger";
+import { setMainWindowVisible, setPlayerExpanded } from "@main/utils/powerBlocker";
 
 /** 判断是否应用内部导航 */
 const isInternalNavigation = (url: string): boolean => {
@@ -21,6 +23,8 @@ const isInternalNavigation = (url: string): boolean => {
 };
 
 let mainWindow: BrowserWindow | null = null;
+let firstPaint: Promise<void> = Promise.resolve();
+let startupShown = false;
 
 /** 读取主窗口应使用的缩放比例 */
 const getMainWindowZoomFactor = (): number => {
@@ -61,14 +65,9 @@ export const createMainWindow = (): BrowserWindow => {
     });
   }
 
-  // 恢复最大化状态
-  if (remember && saved?.maximized) {
-    mainWindow.maximize();
-  }
-
-  // 窗口内容就绪
-  mainWindow.once("ready-to-show", () => {
-    mainWindow?.show();
+  startupShown = false;
+  firstPaint = new Promise((resolve) => {
+    mainWindow!.once("ready-to-show", resolve);
   });
   mainWindow.on("show", () => setTaskbarLyricMainWindowVisible(true));
   mainWindow.on("hide", () => setTaskbarLyricMainWindowVisible(false));
@@ -82,6 +81,19 @@ export const createMainWindow = (): BrowserWindow => {
   // 缩略图工具栏
   mainWindow.once("show", () => {
     initThumbar(mainWindow!);
+  });
+
+  mainWindow.on("show", () => setMainWindowVisible(!mainWindow!.isMinimized()));
+  mainWindow.on("hide", () => setMainWindowVisible(false));
+  mainWindow.on("minimize", () => setMainWindowVisible(false));
+  mainWindow.on("restore", () => setMainWindowVisible(mainWindow!.isVisible()));
+  mainWindow.webContents.on("render-process-gone", () => setPlayerExpanded(false));
+  mainWindow.webContents.on("did-start-navigation", (_event, _url, inPlace, isMainFrame) => {
+    if (isMainFrame && !inPlace) setPlayerExpanded(false);
+  });
+
+  mainWindow.webContents.on("did-finish-load", () => {
+    if (startupShown) applyMainWindowZoom();
   });
 
   // 保存窗口状态
@@ -160,8 +172,8 @@ export const createMainWindow = (): BrowserWindow => {
     openExternalSafe(url);
   });
 
-  // 首启引导路径:未完成向导 → 向导;协议版本落后 → 仅协议更新页
-  let initialHash = "";
+  // 初始地址包含首页 hash，避免路由补写地址时重置 Electron 的缩放。
+  let initialHash = "/";
   if (!store.get("system.onboardingCompleted")) {
     initialHash = "/onboarding";
   } else if ((store.get("system.agreedAgreementVersion") as number) < CURRENT_AGREEMENT_VERSION) {
@@ -169,17 +181,23 @@ export const createMainWindow = (): BrowserWindow => {
   }
 
   // 基于 electron-vite cli 的 HMR
+  let loading: Promise<void>;
   if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
     const base = process.env["ELECTRON_RENDERER_URL"];
-    mainWindow.loadURL(initialHash ? `${base}#${initialHash}` : base);
+    loading = mainWindow.loadURL(`${base}#${initialHash}`);
   } else {
-    mainWindow.loadFile(
-      join(__dirname, "../renderer/index.html"),
-      initialHash ? { hash: initialHash } : undefined,
-    );
+    loading = mainWindow.loadFile(join(__dirname, "../renderer/index.html"), { hash: initialHash });
   }
+  void loading.catch((error) => {
+    if (isAppQuitting()) return;
+    coreLog.error("主窗口加载失败", error);
+    dialog.showErrorBox(app.getName(), String(error));
+    app.quit();
+  });
 
   mainWindow.on("closed", () => {
+    setMainWindowVisible(false);
+    setPlayerExpanded(false);
     if (saveStateTimer) clearTimeout(saveStateTimer);
     mainWindow = null;
   });
@@ -197,10 +215,29 @@ export const getMainWindow = (): BrowserWindow | null => {
   return null;
 };
 
+/** 静态启动层首次绘制后显示窗口，页面内部负责与主界面的过渡 */
+export const showReadyMainWindow = async (): Promise<void> => {
+  const win = getMainWindow();
+  if (!win) throw new Error("主窗口不存在");
+  await firstPaint;
+  if (win.isDestroyed()) throw new Error("主窗口已关闭");
+  if (startupShown) return;
+  startupShown = true;
+  // file:// 导航可能重置构造参数中的缩放，只在首次绘制完成后校正。
+  applyMainWindowZoom();
+  if (
+    (store.get("system.rememberWindowState") ?? true) &&
+    store.get("windowStates.main")?.maximized
+  ) {
+    win.maximize();
+  }
+  win.show();
+};
+
 /** 显示并聚焦主窗口（最小化时自动恢复） */
 export const focusMainWindow = (): void => {
   const win = getMainWindow();
-  if (!win) return;
+  if (!win || !startupShown) return;
   if (win.isMinimized()) win.restore();
   win.show();
   win.focus();

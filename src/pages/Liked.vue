@@ -70,7 +70,7 @@ const playbackContext = computed<PlaybackContext | undefined>(() => {
 
 const handlePlayAll = (): void => {
   if (currentTracks.value.length === 0) return;
-  player.playFrom(currentTracks.value, 0, playbackContext.value);
+  player.playFrom(currentTracks.value, { context: playbackContext.value });
 };
 
 // 直进 /liked（没先访问 Library 页）时本地库未初始化，需要手动触发
@@ -178,6 +178,7 @@ const handleMoreMenu = (key: string): void => {
           :show-size="false"
           source="local"
           :playback-context="playbackContext"
+          sort-key="liked.local"
           enable-sort
         />
       </div>
@@ -215,6 +216,7 @@ const handleMoreMenu = (key: string): void => {
           :collection-id="user.likedPlaylistId ?? undefined"
           :playback-context="playbackContext"
           collection-type="playlist"
+          sort-key="liked.online"
           enable-sort
         />
       </div>

@@ -12,6 +12,8 @@ pub struct JsExternalLyric {
 /// 歌曲完整元信息，返回给 JS 侧（load 时一次性返回）
 #[napi(object)]
 pub struct JsMusicMetadata {
+    /// 复用了预载 PCM 时的起点（秒），普通加载为空
+    pub prepared_position: Option<f64>,
     pub title: Option<String>,
     pub artist: Option<String>,
     pub album: Option<String>,
@@ -61,7 +63,7 @@ pub struct JsFftData {
 #[napi(object)]
 #[derive(Default)]
 pub struct JsPlayerEvent {
-    /// 事件类型："stateChanged" | "ended" | "sourceError" | "position" | "fftData" | "outputStalled" | "outputFailed" | "outputFallback"
+    /// 事件类型："stateChanged" | "ended" | "sourceError" | "position" | "transitionChanged" | "fftData" | "outputStalled" | "outputFailed" | "outputFallback"
     #[napi(js_name = "type")]
     pub event_type: String,
     /// 状态（仅 stateChanged 时有值）
@@ -70,6 +72,12 @@ pub struct JsPlayerEvent {
     pub position: Option<f64>,
     /// 时长（秒，仅 position 时有值）
     pub duration: Option<f64>,
+    /// 实际交叉淡化状态（仅 transitionChanged 时有值）
+    pub transition_active: Option<bool>,
+    /// 交接点来源（仅 transitionChanged 开始时有值）
+    pub transition_reason: Option<String>,
+    /// 计划交叉淡化时长（秒，仅 transitionChanged 开始时有值）
+    pub transition_fade_seconds: Option<f64>,
     /// FFT 频谱数据（仅 fftData 时有值，128 个频段，值域 0.0 ~ 1.0）
     pub fft_data: Option<JsFftData>,
     /// 回退原因分类键（仅 outputFallback 时有值：deviceBusy / formatUnsupported / unavailable）

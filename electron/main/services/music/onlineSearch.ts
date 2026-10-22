@@ -1,61 +1,21 @@
 import { callKugou } from "@main/apis/kugou";
 import { callNetease } from "@main/apis/netease";
 import { callQQMusic } from "@main/apis/qqmusic";
-import type { Track, TrackFee } from "@shared/types/player";
+import type { Track } from "@shared/types/player";
 import type { Platform } from "@shared/types/platform";
-import { cacheTracks } from "./cache";
-
-interface RawArtist {
-  id?: number | string;
-  name?: string;
-}
-
-interface NeteaseSong {
-  id: number | string;
-  name: string;
-  ar?: RawArtist[];
-  artists?: RawArtist[];
-  al?: { id?: number | string; name?: string; picUrl?: string };
-  album?: { id?: number | string; name?: string; picUrl?: string };
-  dt?: number;
-  duration?: number;
-  fee?: TrackFee;
-  alia?: string[];
-  alias?: string[];
-}
-
-interface QqMusicSong {
-  id: string;
-  mid?: string;
-  name: string;
-  artist?: string;
-  album?: string;
-  albumMid?: string;
-  duration?: number;
-}
-
-interface KugouSong {
-  id: string;
-  hash?: string;
-  name: string;
-  artist?: string;
-  album?: string;
-  cover?: string;
-  coverOriginal?: string;
-  duration?: number;
-}
-
-export interface OnlineSearchResult {
-  platform: Platform;
-  page: number;
-  total: number;
-  hasMore: boolean;
-  tracks: Track[];
-}
+import type { NeteaseSong } from "@shared/types/platform/netease";
+import type { QMSong } from "@shared/types/platform/qqmusic";
+import type { KGSong } from "@shared/types/platform/kugou";
+import type { OnlineSearchResult } from "@shared/types/music";
 
 const sizedNeteaseCover = (url: string | undefined, size: number): string | undefined =>
   url ? `${url}${url.includes("?param=") ? "" : `?param=${size}y${size}`}` : undefined;
 
+/**
+ * 将 NCM 搜索歌曲转换为共用的轻量歌曲
+ * @param song - NCM 歌曲
+ * @returns 统一歌曲信息
+ */
 const neteaseToTrack = (song: NeteaseSong): Track => {
   const album = song.al ?? song.album;
   const artists = song.ar ?? song.artists ?? [];
@@ -82,7 +42,12 @@ const neteaseToTrack = (song: NeteaseSong): Track => {
 const qqCover = (mid: string, size: number): string =>
   `https://y.gtimg.cn/music/photo_new/T002R${size}x${size}M000${mid}.jpg`;
 
-const qqMusicToTrack = (song: QqMusicSong): Track => {
+/**
+ * 将 QM 搜索歌曲转换为共用的轻量歌曲
+ * @param song - QM 歌曲
+ * @returns 统一歌曲信息
+ */
+const qqMusicToTrack = (song: QMSong): Track => {
   const cover = song.albumMid ? qqCover(song.albumMid, 300) : undefined;
   return {
     id: song.mid || song.id,
@@ -97,7 +62,12 @@ const qqMusicToTrack = (song: QqMusicSong): Track => {
   };
 };
 
-const kugouToTrack = (song: KugouSong): Track => ({
+/**
+ * 将 KG 搜索歌曲转换为共用的轻量歌曲
+ * @param song - KG 歌曲
+ * @returns 统一歌曲信息
+ */
+const kugouToTrack = (song: KGSong): Track => ({
   id: song.hash || song.id,
   source: "kugou",
   title: song.name,
@@ -108,6 +78,15 @@ const kugouToTrack = (song: KugouSong): Track => ({
   coverOriginal: song.coverOriginal,
 });
 
+/**
+ * 包装在线搜索的统一分页结果
+ * @param platform - 搜索平台
+ * @param page - 从 1 开始的页码
+ * @param limit - 每页曲目数
+ * @param total - 匹配曲目总数
+ * @param tracks - 当前页的轻量曲目
+ * @returns 可供插件与 MCP 共用的搜索结果
+ */
 const result = (
   platform: Platform,
   page: number,
@@ -115,7 +94,6 @@ const result = (
   total: number,
   tracks: Track[],
 ): OnlineSearchResult => {
-  cacheTracks(tracks);
   return {
     platform,
     page,
@@ -163,7 +141,7 @@ export const searchOnlineTracks = async (
       type: 0,
       page,
       limit,
-    })) as { code?: number; message?: string; total?: number; songs?: QqMusicSong[] };
+    })) as { code?: number; message?: string; total?: number; songs?: QMSong[] };
     if (body.code !== 200) throw new Error(body.message ?? "QQ Music search failed");
     const songs = body.songs ?? [];
     return result(platform, page, limit, body.total ?? songs.length, songs.map(qqMusicToTrack));
@@ -173,7 +151,7 @@ export const searchOnlineTracks = async (
     code?: number;
     message?: string;
     total?: number;
-    songs?: KugouSong[];
+    songs?: KGSong[];
   };
   if (body.code !== 200) throw new Error(body.message ?? "Kugou search failed");
   const songs = body.songs ?? [];

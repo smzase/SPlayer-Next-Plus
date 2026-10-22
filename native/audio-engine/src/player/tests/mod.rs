@@ -54,3 +54,5 @@ fn stale_output_failure_callback_is_ignored() {
     callback();
     assert_eq!(calls.load(Ordering::Relaxed), 1);
 }
+
+mod preload;

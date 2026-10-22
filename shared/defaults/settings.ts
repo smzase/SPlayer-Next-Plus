@@ -22,6 +22,7 @@ export const defaultSystemConfig: SystemConfig = {
     syncWindowsVolumeMixer: false,
     loudnessNormalization: false,
     audioOutputMode: "shared",
+    keepScreenAwake: false,
     equalizer: {
       enabled: false,
       preset: "flat",

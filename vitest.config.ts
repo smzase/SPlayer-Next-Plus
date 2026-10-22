@@ -8,6 +8,7 @@ import pkg from "./package.json" with { type: "json" };
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_RELEASES_URL__: JSON.stringify(`${pkg.repository.url}/releases`),
     __APP_REPO_URL__: JSON.stringify(pkg.repository.url),
     __APP_REPO_NAME__: JSON.stringify(pkg.productName),
     __APP_AUTHOR__: JSON.stringify(pkg.author.name),
@@ -36,8 +37,8 @@ export default defineConfig({
   test: {
     environment: "happy-dom",
     include: [
+      "electron/**/*.spec.ts",
       "src/**/*.spec.ts",
-      "electron/main/**/*.spec.ts",
       "windows/**/*.spec.ts",
       "docs/**/*.spec.ts",
     ],

@@ -1,5 +1,5 @@
 import type { Track } from "@shared/types/player";
-import type { NeteaseDjProgram, NeteaseDjRadio } from "@/types/netease";
+import type { NeteaseDjProgram, NeteaseDjRadio } from "@shared/types/platform/netease";
 import type { Podcast } from "@/types/podcast";
 import { netease as neteaseApi } from "@/apis/netease";
 import { ensureOk } from "@/utils/format/netease";
