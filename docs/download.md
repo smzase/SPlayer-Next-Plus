@@ -58,32 +58,26 @@ sudo pacman -S splayer-next-debug
 
 ### Linux 安装包选择
 
-| 格式     | 适用发行版                   |
-| -------- | ---------------------------- |
-| AppImage | 通用 Linux，无需安装         |
-| deb      | Debian、Ubuntu、Linux Mint   |
-| rpm      | Fedora、RHEL、openSUSE       |
-| pacman   | Manjaro                      |
-| tar.gz   | 通用压缩包，适合手动解压运行 |
+| 格式     | 适用发行版                 |
+| -------- | -------------------------- |
+| AppImage | 通用 Linux，无需安装       |
+| deb      | Debian、Ubuntu、Linux Mint |
+| rpm      | Fedora、RHEL、openSUSE     |
+| pacman   | Manjaro                    |
 
 ```bash
 # AppImage
-chmod +x ./splayer-next-*.AppImage
-./splayer-next-*.AppImage # 直接运行
-./splayer-next-*.AppImage --appimage-extract # 或解压到 squashfs-root 目录
+chmod +x ./SPlayer-Next-Plus-*-Linux-*.AppImage
+./SPlayer-Next-Plus-*-Linux-*.AppImage # 直接运行
+./SPlayer-Next-Plus-*-Linux-*.AppImage --appimage-extract # 或解压到 squashfs-root 目录
 
 # deb
-sudo apt install ./splayer-next-*.deb
+sudo apt install ./SPlayer-Next-Plus-*-Linux-*.deb
 
 # rpm
-sudo dnf install ./splayer-next-*.rpm # Fedora
-sudo zypper install ./splayer-next-*.rpm # openSUSE
+sudo dnf install ./SPlayer-Next-Plus-*-Linux-*.rpm # Fedora
+sudo zypper install ./SPlayer-Next-Plus-*-Linux-*.rpm # openSUSE
 
 # pacman
-sudo pacman -U ./splayer-next-*.pacman
-
-# 压缩包
-tar -xzf ./splayer-next-*.tar.gz
-cd splayer-next-*/
-./SPlayer-Next
+sudo pacman -U ./SPlayer-Next-Plus-*-Linux-*.pacman
 ```

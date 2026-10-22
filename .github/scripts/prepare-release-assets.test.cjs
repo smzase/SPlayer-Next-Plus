@@ -22,14 +22,21 @@ const writeManifest = (dir, name, version, asset) => {
   );
 };
 
+/**
+ * 创建包含系统标识的六平台构建产物和更新清单
+ * @param {string} root - 构建产物目录
+ * @param {string} version - 应用版本
+ * @param {string} channel - 更新通道
+ */
 const createFixture = (root, version, channel) => {
+  const prefix = `SPlayer-Next-Plus-${version}`;
   const assets = [
-    ["win-x64", `${channel}.yml`, "app-x64-setup.exe"],
-    ["win-arm64", `${channel}.yml`, "app-arm64-setup.exe"],
-    ["mac-x64", `${channel}-mac.yml`, "app-x64.zip"],
-    ["mac-arm64", `${channel}-mac.yml`, "app-arm64.zip"],
-    ["linux-x64", `${channel}-linux.yml`, "app-x86_64.AppImage"],
-    ["linux-arm64", `${channel}-linux-arm64.yml`, "app-arm64.AppImage"],
+    ["win-x64", `${channel}.yml`, `${prefix}-Windows-x64-setup.exe`],
+    ["win-arm64", `${channel}.yml`, `${prefix}-Windows-arm64-setup.exe`],
+    ["mac-x64", `${channel}-mac.yml`, `${prefix}-Mac-x64.zip`],
+    ["mac-arm64", `${channel}-mac.yml`, `${prefix}-Mac-arm64.zip`],
+    ["linux-x64", `${channel}-linux.yml`, `${prefix}-Linux-x86_64.AppImage`],
+    ["linux-arm64", `${channel}-linux-arm64.yml`, `${prefix}-Linux-arm64.AppImage`],
   ];
   for (const [folder, manifest, assetName] of assets) {
     const dir = path.join(root, folder);
@@ -53,7 +60,7 @@ test("正式版生成 latest、beta 和 alpha 的完整更新清单", () => {
     }
     const windows = yaml.load(fs.readFileSync(path.join(out, "latest.yml"), "utf8"));
     assert.equal(windows.files.length, 2);
-    assert.equal(windows.path, "app-x64-setup.exe");
+    assert.equal(windows.path, "SPlayer-Next-Plus-1.2.0-Windows-x64-setup.exe");
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -107,4 +114,34 @@ test("Nightly 版只发布 nightly 清单", () => {
 
 test("拒绝未支持的预发布通道", () => {
   assert.throws(() => resolveChannel("1.3.0-rc.1"), /不支持的预发布版本格式/);
+});
+
+test("剔除差分文件和 Linux 压缩包后保留完整更新清单", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "splayer-release-trim-"));
+  try {
+    const src = path.join(root, "artifacts");
+    const out = path.join(root, "out");
+    createFixture(src, "1.3.0-beta.1", "beta");
+    for (const name of [
+      "app-x64-setup.exe.blockmap",
+      "app-arm64.dmg.blockmap",
+      "app-arm64.zip.blockmap",
+      "SPlayer-Next-Plus-1.3.0-beta.1-Linux-x64.tar.gz",
+      "builder-debug.yml",
+      "builder-effective-config.yaml",
+    ]) {
+      createArtifact(path.join(src, "extra"), name, "unused");
+    }
+    prepareReleaseAssets(src, out, "1.3.0-beta.1");
+    const files = fs.readdirSync(out);
+    assert.equal(files.length, 14);
+    assert.ok(!files.some((name) => /\.blockmap$|\.tar\.gz$|^builder-/.test(name)));
+    for (const channel of ["beta", "alpha"]) {
+      const windows = yaml.load(fs.readFileSync(path.join(out, `${channel}.yml`), "utf8"));
+      assert.equal(windows.files.length, 2);
+      assert.ok(windows.files.every((file) => fs.existsSync(path.join(out, file.url))));
+    }
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

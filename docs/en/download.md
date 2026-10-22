@@ -61,26 +61,20 @@ sudo pacman -S splayer-next-debug
 | deb      | Debian, Ubuntu, Linux Mint                       |
 | rpm      | Fedora, RHEL, openSUSE                           |
 | pacman   | Manjaro                                          |
-| tar.gz   | Generic archive for manual extraction            |
 
 ```bash
 # AppImage
-chmod +x ./splayer-next-*.AppImage
-./splayer-next-*.AppImage
-./splayer-next-*.AppImage --appimage-extract
+chmod +x ./SPlayer-Next-Plus-*-Linux-*.AppImage
+./SPlayer-Next-Plus-*-Linux-*.AppImage
+./SPlayer-Next-Plus-*-Linux-*.AppImage --appimage-extract
 
 # deb
-sudo apt install ./splayer-next-*.deb
+sudo apt install ./SPlayer-Next-Plus-*-Linux-*.deb
 
 # rpm
-sudo dnf install ./splayer-next-*.rpm
-sudo zypper install ./splayer-next-*.rpm
+sudo dnf install ./SPlayer-Next-Plus-*-Linux-*.rpm
+sudo zypper install ./SPlayer-Next-Plus-*-Linux-*.rpm
 
 # pacman
-sudo pacman -U ./splayer-next-*.pacman
-
-# Archive
-tar -xzf ./splayer-next-*.tar.gz
-cd splayer-next-*/
-./SPlayer-Next
+sudo pacman -U ./SPlayer-Next-Plus-*-Linux-*.pacman
 ```

@@ -304,12 +304,14 @@ const onError = (error: Error): void => {
   }
 };
 
-/** 初始化更新器；解压版只绕过安装形式检查，所有安装入口仍由 mode 拦截。 */
+/** 初始化更新器并使用完整包下载，安装能力由 mode 控制 */
 export const initUpdater = (): void => {
   disposed = false;
   autoUpdater.logger = updaterLog;
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
+  // 发布资源不再提供独立差分清单，直接下载完整包以避免额外的失败请求
+  autoUpdater.disableDifferentialDownload = true;
   autoUpdater.forceDevUpdateConfig = isDev || state.mode === "external";
   removeListeners();
   autoUpdater.on("download-progress", onProgress);

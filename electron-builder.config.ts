@@ -120,7 +120,7 @@ const config: Configuration = {
   win: {
     executableName: "SPlayer-Next-Plus",
     icon: "public/icons/logo.ico",
-    artifactName: "${productName}-${version}-${arch}.${ext}",
+    artifactName: "${productName}-${version}-Windows-${arch}.${ext}",
     forceCodeSigning: false,
     target: ["nsis", "portable"],
     protocols: [{ name: "Orpheus Protocol", schemes: ["orpheus"] }],
@@ -135,7 +135,8 @@ const config: Configuration = {
     uninstallerSidebar: "build/installer/sidebar.bmp",
     include: "build/installer/installer.nsh",
     installerLanguages: ["en_US", "zh_CN"],
-    artifactName: "${productName}-${version}-${arch}-setup.${ext}",
+    artifactName: "${productName}-${version}-Windows-${arch}-setup.${ext}",
+    differentialPackage: false,
     shortcutName: "SPlayer Next Plus",
     uninstallDisplayName: "SPlayer Next Plus",
     createDesktopShortcut: "always",
@@ -144,12 +145,12 @@ const config: Configuration = {
     license: "build/license.txt",
   },
   portable: {
-    artifactName: "${productName}-${version}-${arch}-portable.${ext}",
+    artifactName: "${productName}-${version}-Windows-${arch}-portable.${ext}",
   },
   mac: {
     executableName: "SPlayer-Next-Plus",
     icon: "public/icons/icon.icns",
-    artifactName: "${productName}-${version}-${arch}.${ext}",
+    artifactName: "${productName}-${version}-Mac-${arch}.${ext}",
     identity: null,
     hardenedRuntime: false,
     notarize: false,
@@ -168,23 +169,23 @@ const config: Configuration = {
     target: ["dmg", "zip"],
   },
   dmg: {
-    artifactName: "${productName}-${version}-${arch}.${ext}",
+    artifactName: "${productName}-${version}-Mac-${arch}.${ext}",
   },
   linux: {
     executableName: "SPlayer-Next-Plus",
     icon: "public/icons/favicon-512x512.png",
-    artifactName: "${productName}-${version}-${arch}.${ext}",
+    artifactName: "${productName}-${version}-Linux-${arch}.${ext}",
     maintainer: "imsyy.top",
     category: "Audio;Music;AudioVideo;",
-    target: ["AppImage", "deb", "rpm", "tar.gz", "pacman"],
+    target: ["AppImage", "deb", "rpm", "pacman"],
     syncDesktopName: true,
     desktop: { entry: { MimeType: "x-scheme-handler/orpheus;" } },
   },
   appImage: {
-    artifactName: "${productName}-${version}-${arch}.${ext}",
+    artifactName: "${productName}-${version}-Linux-${arch}.${ext}",
   },
   pacman: {
-    artifactName: "${productName}-${version}-${arch}.${ext}",
+    artifactName: "${productName}-${version}-Linux-${arch}.${ext}",
     depends: [
       "gtk3",
       "libnotify",

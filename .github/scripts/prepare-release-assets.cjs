@@ -148,7 +148,9 @@ const prepareReleaseAssets = (srcDir, outDir, version, releaseNotes) => {
   const seen = new Set();
   for (const file of walk(srcDir)) {
     const name = path.basename(file);
-    if (SKIP_FILES.has(name)) continue;
+    if (SKIP_FILES.has(name) || name.endsWith(".blockmap") || name.endsWith(".tar.gz")) {
+      continue;
+    }
     if (shouldMergeManifest(name)) {
       const doc = yaml.load(fs.readFileSync(file, "utf8"));
       if (!manifestDocs.has(name)) manifestDocs.set(name, []);
