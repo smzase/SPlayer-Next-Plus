@@ -14,26 +14,19 @@ const path = require("node:path");
  */
 const generateReleaseDownloads = (assets, version, repository, tag) => {
   const baseUrl = `https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}`;
-  const lines = [
-    "## 下载安装",
-    "",
-    "Windows 通常选择 x64 安装版；Apple 芯片 Mac 选择 arm64，Intel Mac 选择 x64；Linux 不确定格式时选择 AppImage",
-    "",
-    "| 系统 | 架构 | 下载 |",
-    "| --- | --- | --- |",
-  ];
+  const lines = ["| 系统 | 架构 | 下载 |", "| --- | --- | --- |"];
   const platforms = [
     [
       "Windows",
       [
-        ["-setup.exe", "安装版（推荐）"],
+        ["-setup.exe", "安装版"],
         ["-portable.exe", "便携版"],
       ],
     ],
     [
       "Mac",
       [
-        [".dmg", "DMG（推荐）"],
+        [".dmg", "DMG"],
         [".zip", "ZIP"],
       ],
     ],
@@ -64,7 +57,7 @@ const generateReleaseDownloads = (assets, version, repository, tag) => {
       lines.push(`| ${platform} | ${arch} | ${links.join(" · ")} |`);
     }
   }
-  lines.push("", "更新使用完整安装包下载，资源列表中的 `.yml` 用于应用检查更新，无需手动下载", "");
+  lines.push("");
   return lines.join("\n");
 };
 
