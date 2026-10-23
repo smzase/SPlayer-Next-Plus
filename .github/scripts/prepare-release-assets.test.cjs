@@ -66,7 +66,7 @@ test("正式版生成 latest、beta 和 alpha 的完整更新清单", () => {
   }
 });
 
-test("Beta 版生成 beta 和 alpha 清单", () => {
+test("Beta 版生成 Latest 清单并保留旧通道兼容", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "splayer-release-beta-"));
   try {
     const src = path.join(root, "artifacts");
@@ -75,13 +75,17 @@ test("Beta 版生成 beta 和 alpha 清单", () => {
     prepareReleaseAssets(src, out, "1.3.0-beta.1");
     assert.equal(fs.existsSync(path.join(out, "beta.yml")), true);
     assert.equal(fs.existsSync(path.join(out, "alpha.yml")), true);
-    assert.equal(fs.existsSync(path.join(out, "latest.yml")), false);
+    for (const suffix of ["", "-mac", "-linux", "-linux-arm64"]) {
+      const latest = fs.readFileSync(path.join(out, `latest${suffix}.yml`), "utf8");
+      assert.equal(latest, fs.readFileSync(path.join(out, `beta${suffix}.yml`), "utf8"));
+      assert.equal(yaml.load(latest).version, "1.3.0-beta.1");
+    }
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("Alpha 版只发布 alpha 清单", () => {
+test("Alpha 版也提供 Latest 清单", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "splayer-release-alpha-"));
   try {
     const src = path.join(root, "artifacts");
@@ -89,8 +93,8 @@ test("Alpha 版只发布 alpha 清单", () => {
     createFixture(src, "1.4.0-alpha.1", "alpha");
     prepareReleaseAssets(src, out, "1.4.0-alpha.1");
     assert.equal(fs.existsSync(path.join(out, "alpha.yml")), true);
-    assert.equal(fs.existsSync(path.join(out, "beta.yml")), false);
-    assert.equal(fs.existsSync(path.join(out, "latest.yml")), false);
+    assert.equal(fs.existsSync(path.join(out, "beta.yml")), true);
+    assert.equal(fs.existsSync(path.join(out, "latest.yml")), true);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -134,9 +138,9 @@ test("剔除差分文件和 Linux 压缩包后保留完整更新清单", () => {
     }
     prepareReleaseAssets(src, out, "1.3.0-beta.1");
     const files = fs.readdirSync(out);
-    assert.equal(files.length, 14);
+    assert.equal(files.length, 18);
     assert.ok(!files.some((name) => /\.blockmap$|\.tar\.gz$|^builder-/.test(name)));
-    for (const channel of ["beta", "alpha"]) {
+    for (const channel of ["latest", "beta", "alpha"]) {
       const windows = yaml.load(fs.readFileSync(path.join(out, `${channel}.yml`), "utf8"));
       assert.equal(windows.files.length, 2);
       assert.ok(windows.files.every((file) => fs.existsSync(path.join(out, file.url))));

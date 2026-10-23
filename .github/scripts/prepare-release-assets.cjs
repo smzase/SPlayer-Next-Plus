@@ -73,18 +73,19 @@ const resolveChannel = (version) => {
 
 const ALIAS_CHANNELS_MAP = {
   latest: ["beta", "alpha"],
-  beta: ["alpha"],
+  beta: ["latest", "alpha"],
+  alpha: ["latest", "beta"],
 };
 
 const VALIDATE_CHANNELS_MAP = {
   latest: ["latest", "beta", "alpha"],
-  beta: ["beta", "alpha"],
-  alpha: ["alpha"],
+  beta: ["latest", "beta", "alpha"],
+  alpha: ["latest", "beta", "alpha"],
   nightly: ["nightly"],
 };
 
 /**
- * 为更不稳定的订阅通道创建清单别名
+ * 为统一 Latest 更新源创建清单，同时兼容旧版通道订阅
  * @param {string} outDir - 发布资源目录
  * @param {"latest" | "beta" | "alpha" | "nightly"} channel - 发布通道
  */

@@ -1,5 +1,3 @@
-import type { UpdateChannel } from "./settings";
-
 /** 应用更新阶段，由主进程统一管理 */
 export type UpdatePhase =
   | "idle"
@@ -17,7 +15,7 @@ export interface UpdateMeta {
   releaseNotes: string;
   releaseDate: string;
   size: number;
-  /** 检查结果对应的发布页，不随之后的通道变更推断 */
+  /** 检查结果对应的发布页 */
   releaseUrl: string;
 }
 
@@ -28,7 +26,6 @@ export type UpdateErrorSource = "check" | "download" | "install";
 /** 可恢复的完整更新快照，不包含安装包或下载器对象 */
 export interface UpdateState {
   revision: number;
-  channel: UpdateChannel;
   phase: UpdatePhase;
   mode: UpdateMode;
   meta: UpdateMeta | null;

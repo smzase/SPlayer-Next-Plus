@@ -7,7 +7,6 @@ import { store } from "@main/store";
 import { isDev, isMac, isPortable, isAppX } from "@main/utils/config";
 import { updaterLog } from "@main/utils/logger";
 import type { UpdateEvent, UpdateMeta, UpdateMode, UpdateState } from "@shared/types/update";
-import { UPDATE_CHANNELS, type UpdateChannel } from "@shared/types/settings";
 
 declare const __APP_RELEASES_URL__: string;
 
@@ -34,15 +33,8 @@ const getMode = (): UpdateMode => {
   return "external";
 };
 
-/** 使用已保存的更新通道，未配置或无效时默认稳定版 */
-const getChannel = (): UpdateChannel => {
-  const value = store.get("update.channel");
-  return UPDATE_CHANNELS.includes(value) ? value : "stable";
-};
-
 let state: UpdateState = {
   revision: 0,
-  channel: getChannel(),
   phase: "idle",
   mode: getMode(),
   meta: null,
@@ -57,7 +49,6 @@ let task: {
   manual: boolean;
   cancel?: CancellationToken;
 } | null = null;
-let pendingCheck: { manual: boolean } | null = null;
 let intervalTimer: ReturnType<typeof setInterval> | null = null;
 
 /** 返回副本，避免 IPC 调用者修改内部状态。 */
@@ -82,16 +73,13 @@ const publish = (
   } satisfies UpdateEvent);
 };
 
-/** 只在更新器空闲时修改 provider，避免进行中的任务读取另一个通道。 */
-const applyChannel = (): void => {
-  autoUpdater.channel = state.channel === "stable" ? "latest" : state.channel;
-  autoUpdater.allowPrerelease = state.channel !== "stable";
+/** 固定检查当前 fork 的 Latest 发布，版本后缀不参与选择更新源 */
+const applyUpdateSource = (): void => {
+  autoUpdater.channel = "latest";
+  // 读取 GitHub Latest，允许其清单版本保留 beta 后缀
+  autoUpdater.allowPrerelease = false;
   autoUpdater.allowDowngrade = false;
-  autoUpdater.setFeedURL(
-    state.channel === "nightly"
-      ? { provider: "generic", url: `${RELEASES_URL}/download/nightly` }
-      : { provider: "github", owner: releaseOwner, repo: releaseRepo },
-  );
+  autoUpdater.setFeedURL({ provider: "github", owner: releaseOwner, repo: releaseRepo });
 };
 
 /**
@@ -101,7 +89,7 @@ const applyChannel = (): void => {
  */
 const toMeta = (info: UpdateInfo): UpdateMeta => {
   const notes = info.releaseNotes;
-  const tag = state.channel === "nightly" ? "nightly" : `v${info.version}`;
+  const tag = `v${info.version}`;
   return {
     version: info.version,
     releaseNotes:
@@ -113,15 +101,13 @@ const toMeta = (info: UpdateInfo): UpdateMeta => {
 };
 
 /**
- * 串行检查，仅保留通道切换后最后一次待执行请求
- * @param manual - 手动检查允许重新获取下载失败的目标，避免 Nightly 覆盖后反复使用旧链接
+ * 串行检查，重复请求合并为同一次检查
+ * @param manual - 手动检查允许重新获取下载失败的目标
  */
 const runCheck = (manual: boolean): void => {
   if (disposed || state.mode === "store") return;
   if (task) {
-    if (task.generation !== generation)
-      pendingCheck = { manual: manual || pendingCheck?.manual === true };
-    else if (task.kind === "check") task.manual ||= manual;
+    if (task.kind === "check") task.manual ||= manual;
     return;
   }
   const retryDownload = manual && state.phase === "error" && state.error?.source === "download";
@@ -131,7 +117,7 @@ const runCheck = (manual: boolean): void => {
   publish({ phase: "checking", meta: null, percent: 0, error: null });
   void (async () => {
     try {
-      applyChannel();
+      applyUpdateSource();
       const result = await autoUpdater.checkForUpdates();
       if (disposed || current.generation !== generation) return;
       if (!result) throw new Error("当前安装形式无法检查更新");
@@ -154,9 +140,6 @@ const runCheck = (manual: boolean): void => {
       }
     } finally {
       if (task === current) task = null;
-      const pending = pendingCheck;
-      pendingCheck = null;
-      if (pending && !disposed) runCheck(pending.manual);
       if (disposed && !task) removeListeners();
     }
   })();
@@ -213,37 +196,14 @@ export const downloadUpdate = (): UpdateState => {
       }
     } finally {
       if (task === current) task = null;
-      const pending = pendingCheck;
-      pendingCheck = null;
-      if (pending && !disposed) runCheck(pending.manual);
       if (disposed && !task) removeListeners();
     }
   })();
   return getUpdateState();
 };
 
-/** 配置写入、重置与导入共用此入口，撤销旧包资格并等待旧任务退出 */
-export const syncUpdateChannel = (): void => {
-  const channel = getChannel();
-  if (state.channel === channel) return;
-  generation++;
-  publish({
-    channel,
-    phase: task?.kind === "download" ? "cancelling" : "idle",
-    meta: null,
-    percent: 0,
-    error: null,
-  });
-  pendingCheck = { manual: true };
-  task?.cancel?.cancel();
-  if (!task) {
-    pendingCheck = null;
-    runCheck(true);
-  }
-};
-
 /**
- * 只有当前通道已完成下载的包可以显式安装，失败保留重试资格
+ * 只有已完成下载的包可以显式安装，失败保留重试资格
  * @returns 启动安装后的即时快照
  */
 export const quitAndInstall = (): UpdateState => {
@@ -268,18 +228,17 @@ export const quitAndInstall = (): UpdateState => {
   return getUpdateState();
 };
 
-/** 下载链接来自已验证的检查结果，商店版交给商店管理。 */
+/** 下载链接来自当前 fork 的检查结果，商店版交给商店管理 */
 export const openDownloadPage = (): void => {
   void shell.openExternal(
     state.mode === "store"
       ? "ms-windows-store://updates"
-      : (state.meta?.releaseUrl ??
-          (state.channel === "nightly" ? `${RELEASES_URL}/tag/nightly` : RELEASES_URL)),
+      : (state.meta?.releaseUrl ?? `${RELEASES_URL}/latest`),
   );
 };
 
 /**
- * 只接受当前下载代次的进度，通道切换后丢弃旧任务事件
+ * 只接受当前下载任务的进度，销毁后丢弃迟到事件
  * @param progress - 底层更新器的下载进度
  */
 const onProgress = (progress: { percent: number }): void => {
@@ -324,7 +283,6 @@ export const initUpdater = (): void => {
 export const disposeUpdater = (): void => {
   disposed = true;
   generation++;
-  pendingCheck = null;
   task?.cancel?.cancel();
   if (intervalTimer) clearInterval(intervalTimer);
   intervalTimer = null;

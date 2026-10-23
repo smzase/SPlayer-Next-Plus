@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
 import { flushPromises } from "@vue/test-utils";
+import { GitHubProvider } from "electron-updater/out/providers/GitHubProvider";
 
 const mocks = vi.hoisted(() => ({
   channel: "stable",
@@ -111,7 +112,7 @@ describe.each(["win32", "linux"])("统一更新任务（%s）", (platform) => {
     }
   });
 
-  it("nightly 安装版尊重显式 stable，且下载完成后不自动退出安装", async () => {
+  it("固定检查 fork Latest，下载完成后不自动退出安装", async () => {
     const service = await import("./updater");
     service.initUpdater();
     service.checkForUpdates(true);
@@ -119,7 +120,12 @@ describe.each(["win32", "linux"])("统一更新任务（%s）", (platform) => {
     const updater = (await import("electron-updater")).default.autoUpdater;
     expect(updater.channel).toBe("latest");
     expect(updater.allowDowngrade).toBe(false);
-    expect(service.getUpdateState().channel).toBe("stable");
+    expect(updater.allowPrerelease).toBe(false);
+    expect(mocks.feed).toHaveBeenCalledWith({
+      provider: "github",
+      owner: "smzase",
+      repo: "SPlayer-Next-Plus",
+    });
     service.downloadUpdate();
     await flushPromises();
     expect(service.getUpdateState().phase).toBe("downloaded");
@@ -127,31 +133,47 @@ describe.each(["win32", "linux"])("统一更新任务（%s）", (platform) => {
     expect(mocks.install).not.toHaveBeenCalled();
   });
 
-  it("检查期间切换 A→B→A，旧结果不展示且只检查最后通道", async () => {
-    const pending = deferred<typeof available>();
-    mocks.check.mockReturnValueOnce(pending.promise).mockResolvedValueOnce(none);
+  it("真实 GitHub 解析器通过 Latest 清单发现 beta 版本并跳过 Nightly", async () => {
     const service = await import("./updater");
     service.initUpdater();
-    service.checkForUpdates(false);
-    mocks.channel = "beta";
-    service.syncUpdateChannel();
-    mocks.channel = "stable";
-    service.syncUpdateChannel();
-    expect(mocks.feed).toHaveBeenCalledTimes(1);
-    pending.resolve(available);
+    service.checkForUpdates(true);
     await flushPromises();
-    expect(mocks.check).toHaveBeenCalledTimes(2);
-    expect(service.getUpdateState()).toMatchObject({
-      channel: "stable",
-      phase: "upToDate",
-      meta: null,
+    const updater = (await import("electron-updater")).default.autoUpdater;
+    const basePath = "/smzase/SPlayer-Next-Plus/releases";
+    const tag = "v1.3.0-beta.1";
+    const manifest = platform === "linux" ? "latest-linux.yml" : "latest.yml";
+    vi.stubEnv("TEST_UPDATER_ARCH", "x64");
+    const request = vi.fn(async (options: { hostname: string; path: string }) => {
+      expect(options.hostname).toBe("github.com");
+      if (options.path === `${basePath}.atom`) {
+        return `<feed>${["nightly", tag]
+          .map(
+            (version) =>
+              `<entry><title>${version}</title><link href="https://github.com${basePath}/tag/${version}"/><content>notes</content></entry>`,
+          )
+          .join("")}</feed>`;
+      }
+      if (options.path === `${basePath}/latest`) return JSON.stringify({ tag_name: tag });
+      expect(options.path).toBe(`${basePath}/download/${tag}/${manifest}`);
+      return JSON.stringify({ ...info, version: "1.3.0-beta.1" });
     });
-    expect(mocks.send.mock.calls.some(([, event]) => event.notification === "available")).toBe(
-      false,
+    const provider = new GitHubProvider(mocks.feed.mock.lastCall![0], updater, {
+      platform: platform as "win32" | "linux",
+      isUseMultipleRangeRequest: false,
+      executor: { request } as unknown as ConstructorParameters<
+        typeof GitHubProvider
+      >[2]["executor"],
+    });
+    const result = await provider.getLatestVersion();
+    expect(result.version).toBe("1.3.0-beta.1");
+    expect(result.tag).toBe(tag);
+    expect(request).toHaveBeenCalledTimes(3);
+    expect(provider.resolveFiles(result)[0].url.href).toBe(
+      `https://github.com${basePath}/download/${tag}/app-x64.exe`,
     );
   });
 
-  it("取消下载后等待旧 Promise 结束再切换 provider，旧成功不能恢复安装资格", async () => {
+  it("销毁后丢弃迟到的下载进度和成功结果", async () => {
     const pending = deferred<string[]>();
     mocks.download.mockReturnValueOnce(pending.promise);
     const service = await import("./updater");
@@ -159,10 +181,7 @@ describe.each(["win32", "linux"])("统一更新任务（%s）", (platform) => {
     service.checkForUpdates(true);
     await flushPromises();
     service.downloadUpdate();
-    mocks.check.mockResolvedValueOnce(none);
-    mocks.channel = "beta";
-    service.syncUpdateChannel();
-    expect(service.getUpdateState()).toMatchObject({ phase: "cancelling", meta: null });
+    service.disposeUpdater();
     expect(mocks.cancel).toHaveBeenCalledOnce();
     expect(mocks.feed).toHaveBeenCalledTimes(1);
     service.downloadUpdate();
@@ -186,24 +205,36 @@ describe.each(["win32", "linux"])("统一更新任务（%s）", (platform) => {
     expect(service.getUpdateState().percent).toBe(0);
     pending.resolve(["old.exe"]);
     await flushPromises();
-    expect(mocks.feed).toHaveBeenCalledTimes(2);
-    expect(service.getUpdateState().phase).toBe("upToDate");
+    expect(mocks.feed).toHaveBeenCalledTimes(1);
+    expect(service.getUpdateState().phase).toBe("downloading");
   });
 
-  it("已下载后切通道撤销显式安装资格", async () => {
-    const service = await import("./updater");
-    service.initUpdater();
-    service.checkForUpdates(true);
-    await flushPromises();
-    service.downloadUpdate();
-    await flushPromises();
-    mocks.channel = "nightly";
-    service.syncUpdateChannel();
-    service.quitAndInstall();
-    expect(mocks.install).not.toHaveBeenCalled();
-    expect(service.getUpdateState().meta).toBeNull();
-    await flushPromises();
-  });
+  it.each(["stable", "beta", "alpha", "nightly"])(
+    "旧配置 %s 不影响 fork Latest 和 beta 版本链接",
+    async (channel) => {
+      mocks.channel = channel;
+      mocks.check.mockResolvedValueOnce({
+        ...available,
+        updateInfo: { ...info, version: "1.3.0-beta.1" },
+      });
+      const service = await import("./updater");
+      service.initUpdater();
+      service.openDownloadPage();
+      expect(mocks.open).toHaveBeenLastCalledWith(
+        "https://github.com/smzase/SPlayer-Next-Plus/releases/latest",
+      );
+      service.checkForUpdates(true);
+      await flushPromises();
+      const updater = (await import("electron-updater")).default.autoUpdater;
+      expect(updater.channel).toBe("latest");
+      expect(updater.allowPrerelease).toBe(false);
+      expect(service.getUpdateState().meta?.version).toBe("1.3.0-beta.1");
+      service.openDownloadPage();
+      expect(mocks.open).toHaveBeenLastCalledWith(
+        "https://github.com/smzase/SPlayer-Next-Plus/releases/tag/v1.3.0-beta.1",
+      );
+    },
+  );
 
   it("下载失败后手动检查刷新目标，自动检查不干扰错误状态", async () => {
     mocks.download.mockRejectedValueOnce(new Error("old nightly removed"));

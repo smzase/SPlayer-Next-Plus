@@ -1453,8 +1453,6 @@
       "highResourceContent": "Enabling it may noticeably increase memory and CPU usage, and could cause stuttering on lower-end devices. Enable it anyway?",
       "restartRequiredTitle": "Restart Required",
       "restartRequiredContent": "This setting requires an app restart. Save and relaunch now?",
-      "testChannelTitle": "Switch to a Test Channel",
-      "testChannelContent": "Beta and Alpha channels receive test releases early. Alpha releases may be highly unstable. Switch anyway?",
       "kugouLoginVersionTitle": "Switch KG Login Version",
       "kugouLoginVersionContent": "After switching, the current credentials will not match the new version. You must log out and scan the QR code again, or VIP privileges and high-quality playback will stop working. Switch anyway?",
       "exclusiveModeTitle": "Switch to Exclusive Mode",
@@ -2162,14 +2160,6 @@
     "autoCheckUpdate": {
       "label": "Auto Check for Updates",
       "description": "Check for new versions in the background on launch and periodically"
-    },
-    "updateChannel": {
-      "label": "Update Channel",
-      "description": "Choose which releases to receive. Switching channels never automatically downgrades the app.",
-      "stable": "Stable",
-      "beta": "Beta Preview",
-      "alpha": "Alpha Experimental",
-      "nightly": "Nightly Build"
     },
     "showPerformanceMonitor": {
       "label": "Performance Monitor",

@@ -36,8 +36,7 @@ import { startMcpServer, stopMcpServer } from "@main/services/mcp/http";
 import { setOrpheusProtocolRegistered } from "@main/services/orpheus";
 import { setTaskbarThumbnailEnabled } from "@main/services/thumbnail";
 import { setWindowsVolumeSyncEnabled } from "@main/services/windowsVolumeSync";
-import { getUpdateState, syncUpdateChannel } from "@main/services/updater";
-import { UPDATE_CHANNELS } from "@shared/types/settings";
+import { getUpdateState } from "@main/services/updater";
 import { refreshPowerBlocker } from "@main/utils/powerBlocker";
 
 /**
@@ -49,9 +48,6 @@ const applyConfigChange = (keyPath: string, value: unknown): void => {
   switch (keyPath) {
     case "player.keepScreenAwake":
       refreshPowerBlocker();
-      break;
-    case "update.channel":
-      syncUpdateChannel();
       break;
     case "media.systemMediaControls":
       value ? enableMedia() : disableMedia();
@@ -163,12 +159,6 @@ const applyConfigChange = (keyPath: string, value: unknown): void => {
 export const registerConfigIpc = (): void => {
   ipcMain.handle("config:get", (_event, keyPath: string) => store.get(keyPath as ConfigPath));
   ipcMain.handle("config:set", (_event, keyPath: string, value: unknown) => {
-    if (keyPath === "update.channel" && getUpdateState().phase === "installing") {
-      throw new Error("安装启动中，无法切换更新通道");
-    }
-    if (keyPath === "update.channel" && !UPDATE_CHANNELS.some((channel) => channel === value)) {
-      throw new Error(`无效的更新通道: ${String(value)}`);
-    }
     store.set(keyPath, value);
     applyConfigChange(keyPath, value);
   });
@@ -176,7 +166,6 @@ export const registerConfigIpc = (): void => {
   ipcMain.handle("config:reset", () => {
     if (getUpdateState().phase === "installing") throw new Error("安装启动中，无法重置配置");
     store.clear();
-    syncUpdateChannel();
     refreshPowerBlocker();
   });
 
@@ -184,7 +173,6 @@ export const registerConfigIpc = (): void => {
   ipcMain.handle("config:replaceAll", (_event, payload: unknown) => {
     if (getUpdateState().phase === "installing") throw new Error("安装启动中，无法替换配置");
     store.replaceAll(payload);
-    syncUpdateChannel();
     refreshPowerBlocker();
   });
 

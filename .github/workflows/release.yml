@@ -1,5 +1,5 @@
 # tag（v*）触发
-# 各架构原生 runner 构建 → 合并清单 → 创建 GitHub 草稿 Release
+# 各架构原生 runner 构建 → 合并清单 → 发布为 GitHub Latest
 name: Release
 
 on:
@@ -193,7 +193,7 @@ jobs:
           name: SPlayer-Next-Plus-${{ matrix.name }}
           path: dist/*.*
 
-  # 合并多架构更新清单并创建 GitHub 草稿 Release
+  # 合并多架构更新清单并发布为 GitHub Latest
   release:
     name: Create GitHub Release
     needs: build
@@ -257,7 +257,7 @@ jobs:
         run: node .github/scripts/generate-release-downloads.cjs release-assets "$APP_VERSION" "$GITHUB_REPOSITORY" "$RELEASE_TAG" release-downloads.md
 
       # 用官方 gh CLI 确定性创建 Release
-      # 正式版保持草稿，预览版直接发布为 prerelease
+      # GitHub 发布状态独立于版本后缀，统一标记为 Latest
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -279,22 +279,12 @@ jobs:
           else
             TAG_OPTIONS=(--target "$SOURCE_SHA")
           fi
-          if [ "$UPDATE_CHANNEL" != "latest" ]; then
-            gh release create "$RELEASE_TAG" \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "$RELEASE_TAG" \
-              --generate-notes \
-              --notes-file release-downloads.md \
-              "${TAG_OPTIONS[@]}" \
-              --prerelease \
-              release-assets/*
-          else
-            gh release create "$RELEASE_TAG" \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "$RELEASE_TAG" \
-              --generate-notes \
-              --notes-file release-downloads.md \
-              "${TAG_OPTIONS[@]}" \
-              --draft \
-              release-assets/*
-          fi
+          gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$RELEASE_TAG" \
+            --generate-notes \
+            --notes-file release-downloads.md \
+            "${TAG_OPTIONS[@]}" \
+            --prerelease=false \
+            --latest \
+            release-assets/*

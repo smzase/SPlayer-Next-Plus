@@ -8,7 +8,6 @@ vi.mock("@/composables/useToast", () => ({ toast: mocks }));
 vi.mock("@/i18n", () => ({ default: { global: { t: (key: string) => key } } }));
 const initial: UpdateState = {
   revision: 1,
-  channel: "stable",
   phase: "idle",
   mode: "inApp",
   meta: null,
@@ -98,7 +97,7 @@ describe("更新快照与用户入口", () => {
     await flushPromises();
     expect(store.phase).toBe("available");
     expect(api.check).not.toHaveBeenCalled();
-    event({ state: { ...initial, revision: 6, channel: "beta", phase: "cancelling" } });
+    event({ state: { ...initial, revision: 6, phase: "checking" } });
     expect(store.meta).toBeNull();
     expect(store.hasUpdate).toBe(false);
     expect(store.dialogOpen).toBe(false);

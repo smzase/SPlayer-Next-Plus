@@ -6,7 +6,6 @@ const mocks = vi.hoisted(() => ({
   set: vi.fn(),
   clear: vi.fn(),
   replaceAll: vi.fn(),
-  sync: vi.fn(),
 }));
 vi.mock("electron", () => ({
   dialog: {},
@@ -20,7 +19,6 @@ vi.mock("@main/store", () => ({
 }));
 vi.mock("@main/services/updater", () => ({
   getUpdateState: () => ({ phase: mocks.phase }),
-  syncUpdateChannel: mocks.sync,
 }));
 vi.mock("@main/utils/logger", () => ({ systemLog: {} }));
 vi.mock("@main/utils/powerBlocker", () => ({ refreshPowerBlocker: vi.fn() }));
@@ -45,27 +43,19 @@ describe("更新配置入口", () => {
   });
 
   it.each([
-    ["config:set", [null, "update.channel", "stable"], "set"],
     ["config:reset", [], "clear"],
     ["config:replaceAll", [null, { update: { channel: "beta" } }], "replaceAll"],
-  ] as const)("%s 写入后同步更新器，安装启动中拒绝改动", (channel, args, method) => {
+  ] as const)("%s 安装启动中拒绝改动", (channel, args, method) => {
     const invoke = mocks.handlers.get(channel)!;
     invoke(...args);
     expect(mocks[method]).toHaveBeenCalledOnce();
-    expect(mocks.sync).toHaveBeenCalledOnce();
-    expect(mocks[method].mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.sync.mock.invocationCallOrder[0],
-    );
     mocks.phase = "installing";
     expect(() => invoke(...args)).toThrow("安装启动中");
     expect(mocks[method]).toHaveBeenCalledOnce();
   });
 
-  it("非法通道不能写入配置", () => {
-    expect(() => mocks.handlers.get("config:set")!(null, "update.channel", "invalid")).toThrow(
-      "无效的更新通道",
-    );
-    expect(mocks.set).not.toHaveBeenCalled();
-    expect(mocks.sync).not.toHaveBeenCalled();
+  it("仍允许设置自动检查更新", () => {
+    mocks.handlers.get("config:set")!(null, "update.autoCheck", false);
+    expect(mocks.set).toHaveBeenCalledWith("update.autoCheck", false);
   });
 });

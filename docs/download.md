@@ -16,7 +16,7 @@ title: 下载
 | **Beta**   | 愿意提前体验新功能 | Beta、后续 Stable          | `1.3.0-beta.1`  |
 | **Alpha**  | 开发测试与问题反馈 | Alpha、后续 Beta 和 Stable | `1.4.0-alpha.1` |
 
-应用内可在 **设置 → 通用 → 更新通道** 中切换。Alpha 版本可能非常不稳定，切换到更稳定的通道时，应用可能需要安装版本号更低的构建。
+SPlayer-Next-Plus 应用内仅使用一个更新渠道：**设置 → 关于软件 → 检查更新** 会检查 [本 fork 的 Latest 发行版](https://github.com/smzase/SPlayer-Next-Plus/releases/latest)，版本号可保留 `-beta.1` 后缀。
 
 ## 其他获取方式
 
