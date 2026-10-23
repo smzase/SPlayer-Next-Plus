@@ -25,3 +25,6 @@ minimumReleaseAgeExclude:
 
 overrides:
   node-abi: ^4.33.0
+
+patchedDependencies:
+  "@applemusic-like-lyrics/core@0.6.0": patches/@applemusic-like-lyrics__core@0.6.0.patch

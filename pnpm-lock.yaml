@@ -7,6 +7,11 @@ settings:
 overrides:
   node-abi: ^4.33.0
 
+patchedDependencies:
+  '@applemusic-like-lyrics/core@0.6.0':
+    hash: ffd938961af2e2788b6b7d5dfdf41d11dd73e4036cbc2291373a16b8bd02003b
+    path: patches/@applemusic-like-lyrics__core@0.6.0.patch
+
 importers:
 
   .:
@@ -56,7 +61,7 @@ importers:
     devDependencies:
       '@applemusic-like-lyrics/core':
         specifier: ^0.6.0
-        version: 0.6.0(@pixi/app@7.4.3(@pixi/core@7.4.3)(@pixi/display@7.4.3(@pixi/core@7.4.3)))(@pixi/core@7.4.3)(@pixi/display@7.4.3(@pixi/core@7.4.3))(@pixi/filter-blur@7.4.3(@pixi/core@7.4.3))(@pixi/filter-bulge-pinch@5.1.1(@pixi/core@7.4.3))(@pixi/filter-color-matrix@7.4.3(@pixi/core@7.4.3))(@pixi/sprite@7.4.3(@pixi/core@7.4.3)(@pixi/display@7.4.3(@pixi/core@7.4.3)))(@types/node@22.19.17)(happy-dom@20.11.1)(vite@7.3.6(@types/node@22.19.17)(jiti@2.7.0)(sass-embedded@1.100.0)(sass@1.100.0)(tsx@4.23.7)(yaml@2.9.0))
+        version: 0.6.0(patch_hash=ffd938961af2e2788b6b7d5dfdf41d11dd73e4036cbc2291373a16b8bd02003b)(@pixi/app@7.4.3(@pixi/core@7.4.3)(@pixi/display@7.4.3(@pixi/core@7.4.3)))(@pixi/core@7.4.3)(@pixi/display@7.4.3(@pixi/core@7.4.3))(@pixi/filter-blur@7.4.3(@pixi/core@7.4.3))(@pixi/filter-bulge-pinch@5.1.1(@pixi/core@7.4.3))(@pixi/filter-color-matrix@7.4.3(@pixi/core@7.4.3))(@pixi/sprite@7.4.3(@pixi/core@7.4.3)(@pixi/display@7.4.3(@pixi/core@7.4.3)))(@types/node@22.19.17)(happy-dom@20.11.1)(vite@7.3.6(@types/node@22.19.17)(jiti@2.7.0)(sass-embedded@1.100.0)(sass@1.100.0)(tsx@4.23.7)(yaml@2.9.0))
       '@electron-toolkit/eslint-config-ts':
         specifier: ^3.1.0
         version: 3.1.0(eslint@10.10.0(jiti@2.7.0))(typescript@6.0.3)
@@ -5555,7 +5560,7 @@ snapshots:
       package-manager-detector: 1.6.0
       tinyexec: 1.1.1
 
-  '@applemusic-like-lyrics/core@0.6.0(@pixi/app@7.4.3(@pixi/core@7.4.3)(@pixi/display@7.4.3(@pixi/core@7.4.3)))(@pixi/core@7.4.3)(@pixi/display@7.4.3(@pixi/core@7.4.3))(@pixi/filter-blur@7.4.3(@pixi/core@7.4.3))(@pixi/filter-bulge-pinch@5.1.1(@pixi/core@7.4.3))(@pixi/filter-color-matrix@7.4.3(@pixi/core@7.4.3))(@pixi/sprite@7.4.3(@pixi/core@7.4.3)(@pixi/display@7.4.3(@pixi/core@7.4.3)))(@types/node@22.19.17)(happy-dom@20.11.1)(vite@7.3.6(@types/node@22.19.17)(jiti@2.7.0)(sass-embedded@1.100.0)(sass@1.100.0)(tsx@4.23.7)(yaml@2.9.0))':
+  '@applemusic-like-lyrics/core@0.6.0(patch_hash=ffd938961af2e2788b6b7d5dfdf41d11dd73e4036cbc2291373a16b8bd02003b)(@pixi/app@7.4.3(@pixi/core@7.4.3)(@pixi/display@7.4.3(@pixi/core@7.4.3)))(@pixi/core@7.4.3)(@pixi/display@7.4.3(@pixi/core@7.4.3))(@pixi/filter-blur@7.4.3(@pixi/core@7.4.3))(@pixi/filter-bulge-pinch@5.1.1(@pixi/core@7.4.3))(@pixi/filter-color-matrix@7.4.3(@pixi/core@7.4.3))(@pixi/sprite@7.4.3(@pixi/core@7.4.3)(@pixi/display@7.4.3(@pixi/core@7.4.3)))(@types/node@22.19.17)(happy-dom@20.11.1)(vite@7.3.6(@types/node@22.19.17)(jiti@2.7.0)(sass-embedded@1.100.0)(sass@1.100.0)(tsx@4.23.7)(yaml@2.9.0))':
     dependencies:
       '@pixi/app': 7.4.3(@pixi/core@7.4.3)(@pixi/display@7.4.3(@pixi/core@7.4.3))
       '@pixi/core': 7.4.3

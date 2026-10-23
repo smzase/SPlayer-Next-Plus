@@ -1,0 +1,262 @@
+diff --git a/dist/amll-core.cjs b/dist/amll-core.cjs
+index fbd090aa45196ed1ba08ac4be703e227fae547f2..17fd3da77f4b8604701e5645def90fed1d95ea19 100644
+--- a/dist/amll-core.cjs
++++ b/dist/amll-core.cjs
+@@ -6770,33 +6770,12 @@ var LineBalancer = class {
+ const SPLIT_WHITESPACE_RE = /(\s+)/;
+ const WHITESPACE_RE = /\s/g;
+ /**
+-* 将输入的单词重新分组，之间没有空格的单词将会组合成一个单词数组
+-*
+-* 例如输入：`["Life", " ", "is", " a", " su", "gar so", "sweet"]`
+-*
+-* 应该返回：`["Life", " ", "is", " a", [" su", "gar"], "so", "sweet"]`
+-* @param words 输入的单词数组
+-* @returns 重新分组后的单词数组
++* 按词语边界组合动画，让同一词内的长音错峰上浮并保留逐字高亮时间
++* @param words - 带有时间戳的歌词音节
++* @returns 保留音节边界的词语分组
+ */
+ function chunkAndSplitLyricWords(words) {
+-	const result = [];
+-	let currentGroup = [];
+-	const flushGroup = () => {
+-		if (currentGroup.length > 0) {
+-			result.push(currentGroup.length === 1 ? currentGroup[0] : [...currentGroup]);
+-			currentGroup = [];
+-		}
+-	};
+-	const processAtom = (atom) => {
+-		const isSpace = atom.word.trim().length === 0;
+-		const hasRuby = (atom.ruby?.length ?? 0) > 0;
+-		const isCJKChar = isCJK(atom.word);
+-		if (!isSpace && !hasRuby && !isCJKChar) currentGroup.push(atom);
+-		else {
+-			flushGroup();
+-			result.push(atom);
+-		}
+-	};
++	const atoms = [];
+ 	for (const w of words) {
+ 		const content = w.word.trim();
+ 		const isSpace = content.length === 0;
+@@ -6804,7 +6783,7 @@ function chunkAndSplitLyricWords(words) {
+ 		const obscene = w.obscene ?? false;
+ 		const hasRuby = (w.ruby?.length ?? 0) > 0;
+ 		if (isSpace) {
+-			processAtom({
++			atoms.push({
+ 				...w,
+ 				obscene
+ 			});
+@@ -6815,19 +6794,19 @@ function chunkAndSplitLyricWords(words) {
+ 			const trailingSpaceMatch = w.word.match(/\s+$/);
+ 			const leadingSpace = leadingSpaceMatch ? leadingSpaceMatch[0] : "";
+ 			const trailingSpace = trailingSpaceMatch ? trailingSpaceMatch[0] : "";
+-			if (leadingSpace) processAtom({
++			if (leadingSpace) atoms.push({
+ 				word: leadingSpace,
+ 				romanWord: "",
+ 				startTime: w.startTime,
+ 				endTime: w.startTime,
+ 				obscene
+ 			});
+-			processAtom({
++			atoms.push({
+ 				...w,
+ 				word: content,
+ 				obscene
+ 			});
+-			if (trailingSpace) processAtom({
++			if (trailingSpace) atoms.push({
+ 				word: trailingSpace,
+ 				romanWord: "",
+ 				startTime: w.endTime,
+@@ -6848,7 +6827,7 @@ function chunkAndSplitLyricWords(words) {
+ 		for (const part of parts) {
+ 			if (!part.trim()) {
+ 				const startTime = w.startTime + currentOffset * timePerUnit;
+-				processAtom({
++				atoms.push({
+ 					word: part,
+ 					romanWord: "",
+ 					startTime,
+@@ -6867,7 +6846,7 @@ function chunkAndSplitLyricWords(words) {
+ 				const chars = part.split("");
+ 				for (const char of chars) {
+ 					const startTime = w.startTime + currentOffset * timePerUnit;
+-					processAtom({
++					atoms.push({
+ 						word: char,
+ 						romanWord: "",
+ 						startTime,
+@@ -6880,7 +6859,7 @@ function chunkAndSplitLyricWords(words) {
+ 				const partRealLen = part.length;
+ 				const startTime = w.startTime + currentOffset * timePerUnit;
+ 				const duration = partRealLen * timePerUnit;
+-				processAtom({
++				atoms.push({
+ 					word: part,
+ 					romanWord: partRomanWord,
+ 					startTime,
+@@ -6891,7 +6870,28 @@ function chunkAndSplitLyricWords(words) {
+ 			}
+ 		}
+ 	}
+-	flushGroup();
++	const segmenter = LyricLineBase.wordSegmenter;
++	if (!segmenter) return atoms;
++	const result = [];
++	const fullText = atoms.map((atom) => atom.word).join("");
++	let atomIndex = 0;
++	let expectedLength = 0;
++	let actualLength = 0;
++	let currentGroup = [];
++	for (const { segment } of segmenter.segment(fullText)) {
++		expectedLength += segment.length;
++		while (actualLength < expectedLength && atomIndex < atoms.length) {
++			const atom = atoms[atomIndex++];
++			currentGroup.push(atom);
++			actualLength += atom.word.length;
++		}
++		// 不拆开带独立时间戳或注音的音节，等分词边界与音节边界重合再分组
++		if (actualLength !== expectedLength) continue;
++		while (currentGroup.length > 1 && !currentGroup[0].word.trim()) result.push(currentGroup.shift());
++		if (currentGroup.length > 0) result.push(currentGroup.length === 1 ? currentGroup[0] : currentGroup);
++		currentGroup = [];
++	}
++	if (currentGroup.length > 0) result.push(currentGroup.length === 1 ? currentGroup[0] : currentGroup);
+ 	return result;
+ }
+ //#endregion
+diff --git a/dist/amll-core.mjs b/dist/amll-core.mjs
+index b38e570ef34f599d6bbd2e3bdd5191bcc51d5f34..82cd5ad88dda391eaba35c57e6ca621cd330abb9 100644
+--- a/dist/amll-core.mjs
++++ b/dist/amll-core.mjs
+@@ -6737,33 +6737,12 @@ var LineBalancer = class {
+ const SPLIT_WHITESPACE_RE = /(\s+)/;
+ const WHITESPACE_RE = /\s/g;
+ /**
+-* 将输入的单词重新分组，之间没有空格的单词将会组合成一个单词数组
+-*
+-* 例如输入：`["Life", " ", "is", " a", " su", "gar so", "sweet"]`
+-*
+-* 应该返回：`["Life", " ", "is", " a", [" su", "gar"], "so", "sweet"]`
+-* @param words 输入的单词数组
+-* @returns 重新分组后的单词数组
++* 按词语边界组合动画，让同一词内的长音错峰上浮并保留逐字高亮时间
++* @param words - 带有时间戳的歌词音节
++* @returns 保留音节边界的词语分组
+ */
+ function chunkAndSplitLyricWords(words) {
+-	const result = [];
+-	let currentGroup = [];
+-	const flushGroup = () => {
+-		if (currentGroup.length > 0) {
+-			result.push(currentGroup.length === 1 ? currentGroup[0] : [...currentGroup]);
+-			currentGroup = [];
+-		}
+-	};
+-	const processAtom = (atom) => {
+-		const isSpace = atom.word.trim().length === 0;
+-		const hasRuby = (atom.ruby?.length ?? 0) > 0;
+-		const isCJKChar = isCJK(atom.word);
+-		if (!isSpace && !hasRuby && !isCJKChar) currentGroup.push(atom);
+-		else {
+-			flushGroup();
+-			result.push(atom);
+-		}
+-	};
++	const atoms = [];
+ 	for (const w of words) {
+ 		const content = w.word.trim();
+ 		const isSpace = content.length === 0;
+@@ -6771,7 +6750,7 @@ function chunkAndSplitLyricWords(words) {
+ 		const obscene = w.obscene ?? false;
+ 		const hasRuby = (w.ruby?.length ?? 0) > 0;
+ 		if (isSpace) {
+-			processAtom({
++			atoms.push({
+ 				...w,
+ 				obscene
+ 			});
+@@ -6782,19 +6761,19 @@ function chunkAndSplitLyricWords(words) {
+ 			const trailingSpaceMatch = w.word.match(/\s+$/);
+ 			const leadingSpace = leadingSpaceMatch ? leadingSpaceMatch[0] : "";
+ 			const trailingSpace = trailingSpaceMatch ? trailingSpaceMatch[0] : "";
+-			if (leadingSpace) processAtom({
++			if (leadingSpace) atoms.push({
+ 				word: leadingSpace,
+ 				romanWord: "",
+ 				startTime: w.startTime,
+ 				endTime: w.startTime,
+ 				obscene
+ 			});
+-			processAtom({
++			atoms.push({
+ 				...w,
+ 				word: content,
+ 				obscene
+ 			});
+-			if (trailingSpace) processAtom({
++			if (trailingSpace) atoms.push({
+ 				word: trailingSpace,
+ 				romanWord: "",
+ 				startTime: w.endTime,
+@@ -6815,7 +6794,7 @@ function chunkAndSplitLyricWords(words) {
+ 		for (const part of parts) {
+ 			if (!part.trim()) {
+ 				const startTime = w.startTime + currentOffset * timePerUnit;
+-				processAtom({
++				atoms.push({
+ 					word: part,
+ 					romanWord: "",
+ 					startTime,
+@@ -6834,7 +6813,7 @@ function chunkAndSplitLyricWords(words) {
+ 				const chars = part.split("");
+ 				for (const char of chars) {
+ 					const startTime = w.startTime + currentOffset * timePerUnit;
+-					processAtom({
++					atoms.push({
+ 						word: char,
+ 						romanWord: "",
+ 						startTime,
+@@ -6847,7 +6826,7 @@ function chunkAndSplitLyricWords(words) {
+ 				const partRealLen = part.length;
+ 				const startTime = w.startTime + currentOffset * timePerUnit;
+ 				const duration = partRealLen * timePerUnit;
+-				processAtom({
++				atoms.push({
+ 					word: part,
+ 					romanWord: partRomanWord,
+ 					startTime,
+@@ -6858,7 +6837,28 @@ function chunkAndSplitLyricWords(words) {
+ 			}
+ 		}
+ 	}
+-	flushGroup();
++	const segmenter = LyricLineBase.wordSegmenter;
++	if (!segmenter) return atoms;
++	const result = [];
++	const fullText = atoms.map((atom) => atom.word).join("");
++	let atomIndex = 0;
++	let expectedLength = 0;
++	let actualLength = 0;
++	let currentGroup = [];
++	for (const { segment } of segmenter.segment(fullText)) {
++		expectedLength += segment.length;
++		while (actualLength < expectedLength && atomIndex < atoms.length) {
++			const atom = atoms[atomIndex++];
++			currentGroup.push(atom);
++			actualLength += atom.word.length;
++		}
++		// 不拆开带独立时间戳或注音的音节，等分词边界与音节边界重合再分组
++		if (actualLength !== expectedLength) continue;
++		while (currentGroup.length > 1 && !currentGroup[0].word.trim()) result.push(currentGroup.shift());
++		if (currentGroup.length > 0) result.push(currentGroup.length === 1 ? currentGroup[0] : currentGroup);
++		currentGroup = [];
++	}
++	if (currentGroup.length > 0) result.push(currentGroup.length === 1 ? currentGroup[0] : currentGroup);
+ 	return result;
+ }
+ //#endregion
