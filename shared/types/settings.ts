@@ -397,7 +397,7 @@ export interface DownloadSettings {
   lyricFileFormat: DownloadLyricFormat;
 }
 
-/** 主窗口几何 */
+/** 主窗口几何（旧版持久化数据，仅供迁移到 Electron 内置窗口状态） */
 export interface MainWindowState {
   width: number;
   height: number;

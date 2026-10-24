@@ -815,7 +815,6 @@ export const createTaskbarLyricWindow = (): BrowserWindow | null => {
   taskbarLyricWindow = createWindow({
     width: INITIAL_WIDTH,
     height: INITIAL_HEIGHT,
-    // 覆盖默认 minWidth/minHeight（800/600），允许 setBounds 缩小到很小
     minWidth: 0,
     minHeight: 0,
     type: "toolbar",

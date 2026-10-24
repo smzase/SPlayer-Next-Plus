@@ -3,9 +3,17 @@ import {
   canUseAsStandaloneGlobalKey,
   eventToAccelerator,
   formatAccelerator,
+  isSupportedAccelerator,
+  matchParsed,
+  normalizeAccelerator,
   parseAccelerator,
 } from "@shared/utils/accelerator";
 
+/**
+ * 创建未按修饰键的键盘事件
+ * @param code - 物理键码
+ * @returns 快捷键测试事件
+ */
 const keyboardEvent = (code: string): KeyboardEvent =>
   ({
     code,
@@ -36,5 +44,21 @@ describe("accelerator 小键盘与方向键", () => {
     expect(canUseAsStandaloneGlobalKey("Numpad7")).toBe(true);
     expect(canUseAsStandaloneGlobalKey("ArrowDown")).toBe(true);
     expect(canUseAsStandaloneGlobalKey("KeyA")).toBe(false);
+  });
+
+  it("旧配置通过新的系统快捷键校验并规范为同一绑定", () => {
+    expect(normalizeAccelerator("Ctrl+NumpadAdd")).toBe("Ctrl+numadd");
+    expect(normalizeAccelerator("Ctrl+ArrowLeft")).toBe("Ctrl+Left");
+    expect(isSupportedAccelerator("Ctrl+NumpadAdd")).toBe(true);
+    expect(isSupportedAccelerator("ArrowLeft")).toBe(true);
+    expect(isSupportedAccelerator("Ctrl+UnknownKey")).toBe(false);
+    expect(formatAccelerator("NumpadMultiply", false)).toBe("Num ×");
+  });
+
+  it("保留上游的 Win 键与小键盘回车匹配", () => {
+    expect(normalizeAccelerator("Meta+num1")).toBe("Super+num1");
+    const event = keyboardEvent("NumpadEnter");
+    expect(eventToAccelerator(event, false)).toBe("Return");
+    expect(matchParsed(event, parseAccelerator("Return", false)!)).toBe(true);
   });
 });

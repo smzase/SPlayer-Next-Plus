@@ -46,6 +46,13 @@ body {
   font-family: var(--user-font, var(--app-font));
 }
 
+html,
+body,
+#app {
+  height: 100%;
+  overflow: hidden;
+}
+
 /* 主区域容器 */
 .bg-app {
   background-color: var(--s-app-bg);

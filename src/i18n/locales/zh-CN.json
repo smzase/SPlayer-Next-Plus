@@ -1077,6 +1077,7 @@
       "update": "更新",
       "language": "语言",
       "playControl": "播放控制",
+      "playBehavior": "播放行为",
       "playbackTransition": "播放过渡",
       "audioSource": "播放音源",
       "scrobble": "听歌打卡",
@@ -1188,8 +1189,8 @@
       "append": "将单曲添加至当前播放列表"
     },
     "searchPlayBehavior": {
-      "label": "搜索页播放行为",
-      "description": "设置在搜索页面双击歌曲时的播放与添加策略",
+      "label": "搜索页播放",
+      "description": "配置搜索页面双击歌曲时的行为",
       "current": "仅播放当前",
       "all": "播放全部"
     },
@@ -1984,6 +1985,12 @@
       "default": "经典布局",
       "sidebarFull": "沉浸侧栏",
       "floating": "灵动悬浮"
+    },
+    "songListStyle": {
+      "label": "歌曲列表样式",
+      "description": "配置歌曲列表的展示密度",
+      "comfortable": "舒适",
+      "compact": "紧凑"
     },
     "routeTransition": {
       "label": "页面切换",

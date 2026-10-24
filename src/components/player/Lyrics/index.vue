@@ -33,6 +33,10 @@ type LyricEngineInstance = {
 
 const activeEngineRef = ref<LyricEngineInstance | null>(null);
 
+/** 歌词引擎按需加载 */
+const AMLLLyrics = defineAsyncComponent(() => import("./AMLLLyrics.vue"));
+const DefaultLyrics = defineAsyncComponent(() => import("./DefaultLyrics.vue"));
+
 const springConfig = computed(() => ({
   mass: settings.lyric.springMass,
   damping: settings.lyric.springDamping,

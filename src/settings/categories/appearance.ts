@@ -139,6 +139,16 @@ const appearanceCategory: SettingCategory = {
           defaultValue: "default",
         },
         {
+          key: "songListStyle",
+          type: "select",
+          binding: { store: "settings", path: "appearance.songListStyle" },
+          options: [
+            { value: "comfortable", labelKey: "settings.songListStyle.comfortable" },
+            { value: "compact", labelKey: "settings.songListStyle.compact" },
+          ],
+          defaultValue: "comfortable",
+        },
+        {
           key: "sidebarCollapsed",
           type: "switch",
           binding: { store: "settings", path: "appearance.sidebarCollapsed" },

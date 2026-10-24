@@ -268,7 +268,11 @@ const playingIndex = computed(() => {
   return sortedItems.value.findIndex((track) => track.id === playingId.value);
 });
 
-/** 按用户选择更新队列并播放歌曲 */
+/**
+ * 按统一播放设置更新队列并播放歌曲
+ * @param item - 歌曲数据
+ * @param index - 排序后列表索引
+ */
 const playTrack = (item: Track, index: number): void => {
   if (settings.player.singleTrackQueueMode === "replace") {
     void player.playFrom(sortedItems.value, { startIndex: index, context: props.playbackContext });
@@ -316,6 +320,43 @@ const batch = useMultiSelect(sortedItems, {
   onChanged: (removedIds) => emit("change", removedIds),
 });
 const { deleteConfirmOpen, deleteDialogTitle, deleteDialogContent } = batch;
+
+/** 是否使用紧凑列表样式 */
+const isCompactList = computed(() => settings.appearance.songListStyle === "compact");
+
+/**
+ * 计算歌曲行样式
+ * @param item - 歌曲数据
+ * @returns 行容器的 class 列表
+ */
+const trackRowClass = (item: Track): string[] => {
+  const selected = batch.active.value && batch.selectedIds.value.has(item.id);
+  const playing = playingId.value === item.id;
+
+  if (isCompactList.value) {
+    return [
+      "group flex items-center gap-3 pl-3 pr-4 h-14 rounded-lg cursor-pointer transition-colors duration-150",
+      batch.active.value
+        ? selected
+          ? "bg-primary/10"
+          : "hover:bg-on-surface/5"
+        : playing
+          ? "bg-primary/14"
+          : "hover:bg-on-surface/6 active:bg-on-surface/10",
+    ];
+  }
+
+  return [
+    "group flex items-center gap-3 pl-3 pr-6 h-19 rounded-xl cursor-pointer border-2 border-solid transition-[background-color,border-color] duration-200",
+    batch.active.value
+      ? selected
+        ? "bg-primary/10 border-primary/30"
+        : "bg-surface-panel border-primary/12 hover:border-primary/20 hover:bg-on-surface/5"
+      : playing
+        ? "bg-primary/16 border-primary/40"
+        : "bg-surface-panel border-primary/12 hover:border-primary/30 hover:bg-on-surface/8 active:bg-on-surface/12",
+  ];
+};
 
 /** 添加到歌单相关 */
 const {
@@ -384,6 +425,23 @@ const onTrackDblClick = (item: Track, index: number): void => {
   playTrack(item, index);
 };
 
+/**
+ * 行首播放按钮点击
+ * @param item - 歌曲数据
+ * @param index - 列表索引
+ */
+const onPlayClick = (item: Track, index: number): void => {
+  if (batch.active.value) {
+    batch.toggle(item.id);
+    return;
+  }
+  if (playingId.value === item.id) {
+    player.togglePlay();
+    return;
+  }
+  playTrack(item, index);
+};
+
 const emit = defineEmits<{
   scroll: [event: Event];
   reachBottom: [];
@@ -420,7 +478,7 @@ defineExpose({
       <SVirtualList
         ref="virtualListRef"
         :items="sortedItems"
-        :item-height="88"
+        :item-height="isCompactList ? 56 : 88"
         :padding-bottom="isFloatingPlayerBar ? PLAYER_BAR_GAP : 80"
         :get-item-key="(item: Track) => item.id"
         item-fixed
@@ -550,7 +608,12 @@ defineExpose({
             <!-- 普通模式 -->
             <div
               v-else
-              class="flex items-center gap-3 pl-3 pr-6 mx-3 h-10 border-2 border-solid border-transparent text-sm text-on-surface-variant/60"
+              class="flex items-center gap-3 text-sm text-on-surface-variant/60"
+              :class="
+                isCompactList
+                  ? 'pl-3 pr-4 mx-3 h-9'
+                  : 'pl-3 pr-6 mx-3 h-10 border-2 border-solid border-transparent'
+              "
             >
               <div v-if="showIndex" class="w-8 shrink-0 flex items-center justify-center">
                 <span>#</span>
@@ -634,19 +697,10 @@ defineExpose({
         </template>
         <!-- 列表项 -->
         <template #default="{ item, index }: { item: Track; index: number }">
-          <div class="px-3 pb-3">
+          <div :class="isCompactList ? 'px-3' : 'px-3 pb-3'">
             <div
               data-song-item
-              class="group flex items-center gap-3 pl-3 pr-6 h-19 rounded-xl cursor-pointer border-2 border-solid transition-[background-color,border-color] duration-200"
-              :class="
-                batch.active.value
-                  ? batch.selectedIds.value.has(item.id)
-                    ? 'bg-primary/10 border-primary/30'
-                    : 'bg-surface-panel border-primary/12 hover:border-primary/20 hover:bg-on-surface/5'
-                  : playingId === item.id
-                    ? 'bg-primary/16 border-primary/40'
-                    : 'bg-surface-panel border-primary/12 hover:border-primary/30 hover:bg-on-surface/8 active:bg-on-surface/12'
-              "
+              :class="trackRowClass(item)"
               @click="batch.active.value ? batch.toggle(item.id) : undefined"
               @dblclick="onTrackDblClick(item, index)"
               @contextmenu="contextTrack = item"
@@ -662,13 +716,7 @@ defineExpose({
                       ? 'text-primary'
                       : 'text-on-surface-variant'
                 "
-                @click.stop="
-                  batch.active.value
-                    ? batch.toggle(item.id)
-                    : playingId === item.id
-                      ? player.togglePlay()
-                      : playTrack(item, index)
-                "
+                @click.stop="onPlayClick(item, index)"
               >
                 <!-- 多选模式 -->
                 <SCheckbox
@@ -682,7 +730,8 @@ defineExpose({
                 <template v-else>
                   <span
                     v-if="playingId !== item.id"
-                    class="text-sm font-bold tabular-nums group-hover:opacity-0 transition-opacity duration-300"
+                    class="font-bold tabular-nums group-hover:opacity-0 transition-opacity duration-300"
+                    :class="isCompactList ? 'text-xs' : 'text-sm'"
                   >
                     {{ index + 1 }}
                   </span>
@@ -703,12 +752,18 @@ defineExpose({
               </div>
               <!-- 信息 -->
               <div class="flex-1 min-w-0 flex items-center gap-3">
-                <SImg :src="item.cover" class="size-12 rounded-lg shrink-0" />
+                <SImg
+                  :src="item.cover"
+                  :class="['shrink-0', isCompactList ? 'size-9 rounded-md' : 'size-12 rounded-lg']"
+                />
                 <div class="flex-1 min-w-0">
                   <div class="flex items-baseline gap-1.5 min-w-0">
                     <span
-                      class="text-base font-medium truncate"
-                      :class="playingId === item.id ? 'text-primary' : ''"
+                      :class="[
+                        'font-medium truncate',
+                        isCompactList ? 'text-sm' : 'text-base',
+                        playingId === item.id ? 'text-primary' : '',
+                      ]"
                     >
                       {{ item.title }}
                     </span>
@@ -730,8 +785,11 @@ defineExpose({
                     </span>
                   </div>
                   <div
-                    class="text-sm mt-1 truncate flex items-center gap-1"
-                    :class="playingId === item.id ? 'text-primary/70' : 'text-on-surface-variant'"
+                    :class="[
+                      'truncate flex items-center gap-1',
+                      isCompactList ? 'text-xs mt-0.5' : 'text-sm mt-1',
+                      playingId === item.id ? 'text-primary/70' : 'text-on-surface-variant',
+                    ]"
                   >
                     <STag
                       v-if="downloadStore.isDownloaded(item)"

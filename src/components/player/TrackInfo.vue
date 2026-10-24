@@ -63,6 +63,7 @@ const isArtistLinkable = (artist: Artist): boolean => {
     >
       <SImg :src="media.track?.cover" class="size-full rounded-lg" data-player-cover="bar" />
       <div
+        data-player-cover-overlay
         class="absolute inset-0 z-10 flex items-center justify-center bg-black/0 group-hover:bg-black/40 transition-colors duration-200"
       >
         <IconLucideChevronUp

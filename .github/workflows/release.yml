@@ -17,7 +17,7 @@ permissions:
   contents: write
 
 env:
-  NODE_VERSION: 22.x
+  NODE_VERSION: 24.x
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   RELEASE_REPOSITORY: ${{ github.repository }}
   RELEASE_SOURCE: ${{ github.sha }}

@@ -5,6 +5,7 @@ import { useSettingsStore } from "@/stores/settings";
 import { useOrpheusProtocol } from "@/composables/useOrpheusProtocol";
 import { provideSidebarHoverLayout } from "@/composables/useSidebarHoverLayout";
 import { useExternalFileHandler } from "@/composables/useExternalFileHandler";
+import { useResponsiveLayout } from "@/composables/useResponsiveLayout";
 import { coverTransitionActive, installCoverTransitions } from "@/services/coverTransition";
 import {
   fullPlayerReady,
@@ -16,6 +17,7 @@ const route = useRoute();
 const router = useRouter();
 const status = useStatusStore();
 const settings = useSettingsStore();
+const { sidebarCollapsed } = useResponsiveLayout();
 
 // 接入 orpheus 协议唤起与外部音频文件播放
 useOrpheusProtocol();
@@ -36,6 +38,7 @@ watch(
   },
   { immediate: true },
 );
+
 const { appearance } = settings;
 
 /** 侧边栏悬停展开状态 */
@@ -44,11 +47,11 @@ const sidebarInteractionOpen = ref(false);
 const sidebarElement = ref<HTMLElement | null>(null);
 let sidebarUnlockTimer: ReturnType<typeof setTimeout> | null = null;
 const sidebarHoverExpandActive = computed(
-  () => appearance.sidebarHoverExpand && !appearance.sidebarCollapsed,
+  () => appearance.sidebarHoverExpand && !sidebarCollapsed.value,
 );
 const isSidebarCollapsed = computed(
   () =>
-    appearance.sidebarCollapsed ||
+    sidebarCollapsed.value ||
     (sidebarHoverExpandActive.value && !sidebarHovered.value && !sidebarInteractionOpen.value),
 );
 
@@ -57,7 +60,10 @@ provideSidebarHoverLayout({
   collapsed: isSidebarCollapsed,
 });
 
-/** 浮层退出后再恢复侧边栏的真实悬停状态 */
+/**
+ * 浮层退出后再恢复侧边栏的真实悬停状态
+ * @param open - 是否有侧栏浮层正在交互
+ */
 const handleSidebarHoverLock = (open: boolean): void => {
   if (sidebarUnlockTimer) {
     clearTimeout(sidebarUnlockTimer);
@@ -214,7 +220,7 @@ const playerBarInnerClass = computed(() => {
     </aside>
 
     <!-- 右侧主区域 -->
-    <div class="flex-1 flex flex-col min-w-0" :class="mainMarginClass">
+    <div class="flex-1 flex flex-col min-w-0 min-h-0" :class="mainMarginClass">
       <!-- 顶部导航 -->
       <header class="h-16 shrink-0 flex items-center px-3">
         <NavHeader />
@@ -298,18 +304,22 @@ html[data-player-transition] {
     view-transition-name: player-cover;
   }
 
-  [data-player-cover="bar"] + div {
+  [data-player-cover-overlay] {
     visibility: hidden;
   }
 
+  [data-player-cover="full"] {
+    box-shadow: none;
+  }
+
   &::view-transition-group(*) {
-    animation-duration: 320ms;
+    animation-duration: 450ms;
     animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
   }
 
   &::view-transition-image-pair(player-cover) {
     overflow: clip;
-    animation: player-cover-radius 320ms cubic-bezier(0.2, 0, 0, 1) both;
+    animation: player-cover-radius 450ms cubic-bezier(0.2, 0, 0, 1) both;
   }
 
   &::view-transition-old(player-cover),

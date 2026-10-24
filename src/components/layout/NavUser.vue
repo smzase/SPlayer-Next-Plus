@@ -96,7 +96,7 @@ const handleLogout = async (): Promise<void> => {
   >
     <template #trigger>
       <div
-        class="app-no-drag inline-flex items-center gap-2 h-10 pl-1 pr-3 rounded-full bg-on-surface/6 hover:bg-on-surface/10 transition-colors cursor-pointer select-none"
+        class="app-no-drag inline-flex items-center gap-2 h-10 pl-1 pr-3 lt-sidebar:pr-1 rounded-full bg-on-surface/6 hover:bg-on-surface/10 transition-colors cursor-pointer select-none"
       >
         <button
           type="button"
@@ -117,15 +117,15 @@ const handleLogout = async (): Promise<void> => {
             <IconLucideUserRound v-else class="size-4 text-on-surface-variant" />
           </span>
           <span
-            class="inline-flex h-8 max-w-[7rem] -translate-y-px items-center truncate text-sm leading-none text-on-surface"
+            class="inline-flex h-8 max-w-[7rem] -translate-y-px items-center truncate text-sm leading-none text-on-surface lt-sidebar:hidden"
           >
             {{ user.profile?.nickname || t("login.unknownUser") }}
           </span>
-          <img v-if="isVip" :src="vipImg" alt="VIP" class="h-4 shrink-0" />
+          <img v-if="isVip" :src="vipImg" alt="VIP" class="h-4 shrink-0 lt-sidebar:hidden" />
         </button>
         <IconLucideChevronDown
           :class="[
-            'size-3 text-on-surface-variant transition-transform duration-200',
+            'size-3 text-on-surface-variant transition-transform duration-200 lt-sidebar:hidden',
             popoverOpen && 'rotate-180',
           ]"
         />

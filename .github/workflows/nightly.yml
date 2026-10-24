@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  NODE_VERSION: 22.x
+  NODE_VERSION: 24.x
 
 jobs:
   # 智能检查 dev 分支自上次发布以来是否有新提交

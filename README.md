@@ -90,8 +90,8 @@
 
 ### 环境要求
 
-- **Node.js** >= 22
-- **pnpm** >= 10
+- **Node.js** >= 24
+- **pnpm** >= 12
 - **Rust 工具链**（构建原生模块所需，见下）
 
 ### 原生模块
@@ -128,7 +128,7 @@ pnpm build:linux   # 打包 Linux（AppImage / deb / rpm / pacman）
 
 > 默认仅构建当前架构。如需指定架构，可追加参数，例如 `pnpm build:win --x64 --arm64`。
 
-发行包名称包含系统，例如 `SPlayer-Next-Plus-1.2.0-beta.1-Windows-x64-setup.exe`。
+发行包名称包含系统，例如 `SPlayer-Next-Plus-1.2.1-beta.1-Windows-x64-setup.exe`。
 Release 发布说明按 Windows、Mac、Linux 排列下载入口，各系统保留 x64 和 arm64。
 Linux 默认不再发布 `tar.gz`，其他安装格式保留；更新使用完整包，不再发布 `.blockmap`。
 `.yml` 是应用检查更新所需的清单，必须随安装包保留，无需手动下载。

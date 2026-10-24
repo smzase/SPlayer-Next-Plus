@@ -42,22 +42,15 @@ const item = playerCategory
 const transitionItem = playerCategory
   .sections!.flatMap((section) => section.items)
   .find((item) => item.key === "transitionMode")!;
-const Switch = defineComponent({
-  name: "SSwitch",
-  emits: ["update:modelValue"],
-  setup:
-    (_props, { emit }) =>
-    () =>
-      h("button", { onClick: () => emit("update:modelValue", true) }, "enable"),
-});
-const Select = defineComponent({
-  name: "SSelect",
-  emits: ["update:modelValue"],
-  setup:
-    (_props, { emit }) =>
-    () =>
-      h("button", { onClick: () => emit("update:modelValue", "crossfade") }, "crossfade"),
-});
+/** 创建点击后回传指定值的按钮桩组件 */
+const createButtonStub = (value: boolean | string) =>
+  defineComponent({
+    emits: ["update:modelValue"],
+    setup:
+      (_props, { emit }) =>
+      () =>
+        h("button", { onClick: () => emit("update:modelValue", value) }, String(value)),
+  });
 
 describe("开启预载的缓存确认", () => {
   beforeEach(() => {
@@ -78,7 +71,7 @@ describe("开启预载的缓存确认", () => {
           plugins: [
             createI18n({ legacy: false, locale: "zh-CN", missingWarn: false, fallbackWarn: false }),
           ],
-          stubs: { SSwitch: Switch },
+          stubs: { SSwitch: createButtonStub(true) },
         },
       });
       await wrapper.get("button").trigger("click");
@@ -123,7 +116,7 @@ describe("播放过渡设置", () => {
           plugins: [
             createI18n({ legacy: false, locale: "zh-CN", missingWarn: false, fallbackWarn: false }),
           ],
-          stubs: { SSelect: Select },
+          stubs: { SSelect: createButtonStub("crossfade") },
         },
       });
       await wrapper.get("button").trigger("click");

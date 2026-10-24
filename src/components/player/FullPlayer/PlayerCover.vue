@@ -37,9 +37,9 @@ watchEffect(async () => {
       fullscreen
         ? 'player-cover-fullscreen w-full h-full aspect-auto rounded-none bg-transparent overflow-hidden shrink-0'
         : [
+            'player-cover',
             'w-full aspect-square rounded-[32px] overflow-hidden shrink-0',
             'shadow-[0_0_20px_10px_rgba(0,0,0,0.1)]',
-            'transition-transform duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)]',
             isPlaying ? 'scale-100' : 'scale-90',
           ]
     "
@@ -49,6 +49,12 @@ watchEffect(async () => {
 </template>
 
 <style scoped>
+.player-cover {
+  transition:
+    transform 500ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 200ms ease-out;
+}
+
 .player-cover-fullscreen {
   mask-image: linear-gradient(
     to right,

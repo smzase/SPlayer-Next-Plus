@@ -27,38 +27,6 @@ const playerCategory: SettingCategory = {
           defaultValue: false,
         },
         {
-          key: "singleTrackQueueMode",
-          type: "select",
-          binding: { store: "settings", path: "player.singleTrackQueueMode" },
-          options: [
-            {
-              value: "replace",
-              labelKey: "settings.singleTrackQueueMode.replace",
-            },
-            {
-              value: "append",
-              labelKey: "settings.singleTrackQueueMode.append",
-            },
-          ],
-          defaultValue: "replace",
-        },
-        {
-          key: "showLyricInBar",
-          type: "switch",
-          binding: { store: "settings", path: "player.showLyricInBar" },
-          defaultValue: true,
-        },
-        {
-          key: "searchPlayBehavior",
-          type: "select",
-          binding: { store: "settings", path: "player.searchPlayBehavior" },
-          options: [
-            { value: "current", labelKey: "settings.searchPlayBehavior.current" },
-            { value: "all", labelKey: "settings.searchPlayBehavior.all" },
-          ],
-          defaultValue: "current",
-        },
-        {
           key: "fadeEnabled",
           type: "switch",
           binding: { store: "settings", path: "system.player.fadeEnabled" },
@@ -82,6 +50,31 @@ const playerCategory: SettingCategory = {
           binding: { store: "settings", path: "system.player.loudnessNormalization" },
           defaultValue: false,
           tag: { text: "Beta" },
+        },
+      ],
+    },
+    {
+      id: "playBehavior",
+      items: [
+        {
+          key: "searchPlayBehavior",
+          type: "select",
+          binding: { store: "settings", path: "player.searchPlayBehavior" },
+          options: [
+            { value: "current", labelKey: "settings.searchPlayBehavior.current" },
+            { value: "all", labelKey: "settings.searchPlayBehavior.all" },
+          ],
+          defaultValue: "current",
+        },
+        {
+          key: "singleTrackQueueMode",
+          type: "select",
+          binding: { store: "settings", path: "player.singleTrackQueueMode" },
+          options: [
+            { value: "replace", labelKey: "settings.singleTrackQueueMode.replace" },
+            { value: "append", labelKey: "settings.singleTrackQueueMode.append" },
+          ],
+          defaultValue: "replace",
         },
       ],
     },

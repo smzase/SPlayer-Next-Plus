@@ -106,6 +106,7 @@ export const useSettingsStore = defineStore(
     /** 外观 */
     const appearance = reactive<AppearanceSettings>({
       layoutMode: "default",
+      songListStyle: "comfortable",
       routeTransition: "fade",
       seamlessTransition: false,
       reduceMotion: false,

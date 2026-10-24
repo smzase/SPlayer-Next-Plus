@@ -32,7 +32,6 @@ vi.mock("@main/utils/protocol", () => ({
 }));
 vi.mock("@main/utils/lifecycle", () => ({ isAppQuitting: () => false }));
 vi.mock("@main/utils/broadcast", () => ({ broadcast: vi.fn() }));
-vi.mock("@main/utils/config", () => ({ isWin: false }));
 
 beforeEach(() => {
   vi.resetModules();
@@ -52,8 +51,9 @@ beforeEach(() => {
       mocks.main.emit("show");
     }),
     focus: vi.fn(),
-    maximize: vi.fn(() => mocks.order.push("maximize")),
+    maximize: vi.fn(),
   });
+  mocks.createWindow.mockClear();
   mocks.createWindow.mockImplementation(() => mocks.main);
 });
 
@@ -95,13 +95,66 @@ describe("主窗口启动交接", () => {
     expect(mocks.order).toEqual(["main-show"]);
   });
 
-  it("显示加载层前恢复最大化状态", async () => {
+  it("启用窗口状态持久化并以旧版几何作为迁移默认值", async () => {
+    mocks.settings["windowStates.main"] = {
+      width: 1600,
+      height: 900,
+      x: 120,
+      y: 80,
+      maximized: false,
+    };
     const service = await import("./main");
+    service.createMainWindow();
+    expect(mocks.createWindow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "main-window",
+        windowStatePersistence: true,
+        width: 1600,
+        height: 900,
+        x: 120,
+        y: 80,
+      }),
+    );
+  });
+
+  it("关闭记忆窗口状态时不启用持久化也不使用旧版几何", async () => {
+    mocks.settings["system.rememberWindowState"] = false;
+    mocks.settings["windowStates.main"] = {
+      width: 1600,
+      height: 900,
+      x: 120,
+      y: 80,
+      maximized: true,
+    };
+    const service = await import("./main");
+    service.createMainWindow();
+    const options = mocks.createWindow.mock.calls.at(-1)?.[0];
+    expect(options).not.toHaveProperty("name");
+    expect(options).not.toHaveProperty("windowStatePersistence");
+    expect(options).toEqual(expect.objectContaining({ width: 1280, height: 800 }));
+    mocks.main.emit("ready-to-show");
+    await service.showReadyMainWindow();
+    expect(mocks.main.maximize).not.toHaveBeenCalled();
+  });
+
+  it("首次升级迁移旧版最大化状态且仅在首次显示时应用", async () => {
     mocks.settings["windowStates.main"] = { maximized: true };
+    const service = await import("./main");
     service.createMainWindow();
     mocks.main.emit("ready-to-show");
     await service.showReadyMainWindow();
-    expect(mocks.order).toEqual(["maximize", "main-show"]);
+    service.focusMainWindow();
+    expect(mocks.main.maximize).toHaveBeenCalledOnce();
+  });
+
+  it("已恢复新版窗口状态时不被旧版最大化设置覆盖", async () => {
+    mocks.settings["windowStates.main"] = { maximized: true };
+    const service = await import("./main");
+    service.createMainWindow();
+    mocks.main.emit("persisted-state-restored");
+    mocks.main.emit("ready-to-show");
+    await service.showReadyMainWindow();
+    expect(mocks.main.maximize).not.toHaveBeenCalled();
   });
 
   it("重复就绪通知只交接一次，交接后允许托盘重新显示窗口", async () => {

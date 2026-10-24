@@ -1,4 +1,4 @@
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LyricLine } from "lyric-kit";
 
@@ -22,7 +22,6 @@ vi.mock("@/stores/settings", async () => {
 });
 
 const lyricGlobals = {
-  components: { DefaultLyrics },
   stubs: { AMLLLyrics: true, LyricCredit: true },
 };
 
@@ -55,6 +54,7 @@ describe("默认歌词引擎配置同步", () => {
       global: lyricGlobals,
     });
     try {
+      await flushPromises();
       const root = wrapper.get(".lp-root");
       expect(root.classes().filter((value) => value.startsWith("lp-align-"))).toEqual([]);
       settings.lyric.alignment = "center";

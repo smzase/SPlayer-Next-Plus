@@ -14,11 +14,7 @@ import { useProgressLyric } from "@/composables/useProgressLyric";
 import Lyrics from "@/components/player/Lyrics/index.vue";
 import { useWindowControls } from "@/composables/useWindowControls";
 import * as player from "@/core/player";
-import {
-  playerTransition,
-  playerTransitionActive,
-  setPlayerExpanded,
-} from "@/services/playerTransition";
+import { playerTransitionActive, setPlayerExpanded } from "@/services/playerTransition";
 
 const status = useStatusStore();
 const media = useMediaStore();
@@ -123,38 +119,24 @@ const onBeforeEnter = (): void => {
   enterPrepared = false;
 };
 
-/** 普通过渡完成后准备内容，共享过渡由快照就绪驱动 */
+/** 普通过渡完成后准备内容，共享过渡由快照结束驱动 */
 const onAfterEnter = (): void => {
-  if (!playerTransitionActive.value) preparePlayerContent();
+  if (!isPlayerExpanded.value || playerTransitionActive.value) return;
+  preparePlayerContent();
 };
 
 watch(
-  playerTransition,
+  playerTransitionActive,
   (active, previous, onCleanup) => {
-    if (!active) {
-      if (previous && isPlayerExpanded.value) {
-        preparePlayerContent();
-        if (lyricReady.value) scheduleVisualizers();
-      }
-      return;
-    }
-    let cancelled = false;
-    let idle = 0;
-    onCleanup(() => {
-      cancelled = true;
-      cancelIdleCallback(idle);
-    });
-    // 快照完成后再用空闲时段创建歌词，避免阻塞过渡的首帧
-    void active.ready.then(
+    if (active || !previous || !isPlayerExpanded.value) return;
+    // 动画结束后再加载歌词引擎，避免解析抢占动画帧
+    const idle = requestIdleCallback(
       () => {
-        if (cancelled || !isPlayerExpanded.value) return;
-        idle = requestIdleCallback(() => {
-          idle = 0;
-          if (isPlayerExpanded.value) preparePlayerContent();
-        });
+        if (!playerTransitionActive.value && isPlayerExpanded.value) preparePlayerContent();
       },
-      () => {},
+      { timeout: 300 },
     );
+    onCleanup(() => cancelIdleCallback(idle));
   },
   { immediate: true },
 );
