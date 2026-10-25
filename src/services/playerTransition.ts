@@ -53,7 +53,7 @@ export const setPlayerExpanded = (expanded: boolean): void => {
   const root = document.documentElement;
   source.setAttribute("data-player-shared", "");
   covers.push(source);
-  root.setAttribute("data-player-transition", "");
+  root.setAttribute("data-player-transition", expanded ? "expand" : "collapse");
   root.style.setProperty("--player-cover-from-radius", getComputedStyle(source).borderRadius);
   const active = document.startViewTransition(async () => {
     if (playerTransition.value !== active) return;

@@ -204,7 +204,7 @@ const playerBarInnerClass = computed(() => {
 <template>
   <!-- 主界面 -->
   <div
-    class="player-shell h-screen flex overflow-hidden bg-app text-on-surface transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.7,0,0.3,1)] origin-center"
+    class="player-shell h-screen flex overflow-hidden bg-app text-on-surface transition-[transform,opacity] duration-360 ease-[cubic-bezier(0.25,1,0.35,1)] origin-center"
     :style="playerTransitionActive ? { transition: 'none' } : undefined"
     :class="isPlayerExpanded && fullPlayerReady ? 'scale-95 opacity-0 pointer-events-none' : ''"
   >
@@ -227,11 +227,7 @@ const playerBarInnerClass = computed(() => {
       </header>
 
       <!-- 主内容区 -->
-      <main
-        ref="mainContainerRef"
-        class="flex-1 overflow-y-auto overflow-x-hidden"
-        :data-cover-transition="coverTransitionActive ? '' : undefined"
-      >
+      <main ref="mainContainerRef" class="flex-1 overflow-y-auto overflow-x-hidden">
         <RouterView v-slot="{ Component }">
           <Transition
             :name="routeTransitionName"
@@ -280,25 +276,31 @@ const playerBarInnerClass = computed(() => {
   <AudioInfoDialog />
 </template>
 
-<style scoped>
-:deep([data-cover-shared]) {
-  view-transition-name: detail-cover;
-}
-
-main[data-cover-transition]::view-transition-group(detail-cover) {
-  animation-duration: 320ms;
-  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
-  overflow: clip;
-  border-radius: var(--cover-transition-radius);
-}
-
-main[data-cover-transition]::view-transition-old(detail-cover),
-main[data-cover-transition]::view-transition-new(detail-cover) {
-  height: 100%;
-}
-</style>
-
 <style>
+html[data-cover-transition] {
+  [data-cover-shared] {
+    view-transition-name: detail-cover;
+  }
+
+  &::view-transition-group(detail-cover) {
+    animation-duration: 260ms;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    overflow: clip;
+    border-radius: var(--cover-transition-radius);
+  }
+
+  &::view-transition-old(detail-cover),
+  &::view-transition-new(detail-cover) {
+    height: 100%;
+    object-fit: cover;
+  }
+
+  &::view-transition-old(root),
+  &::view-transition-new(root) {
+    animation: none;
+  }
+}
+
 html[data-player-transition] {
   [data-player-shared] {
     view-transition-name: player-cover;
@@ -312,20 +314,36 @@ html[data-player-transition] {
     box-shadow: none;
   }
 
-  &::view-transition-group(*) {
-    animation-duration: 450ms;
-    animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
-  }
-
   &::view-transition-image-pair(player-cover) {
     overflow: clip;
-    animation: player-cover-radius 450ms cubic-bezier(0.2, 0, 0, 1) both;
   }
 
   &::view-transition-old(player-cover),
   &::view-transition-new(player-cover) {
     height: 100%;
     object-fit: cover;
+  }
+}
+
+html[data-player-transition="expand"] {
+  &::view-transition-group(*) {
+    animation-duration: 360ms;
+    animation-timing-function: cubic-bezier(0.25, 1, 0.35, 1);
+  }
+
+  &::view-transition-image-pair(player-cover) {
+    animation: player-cover-radius 360ms cubic-bezier(0.25, 1, 0.35, 1) both;
+  }
+}
+
+html[data-player-transition="collapse"] {
+  &::view-transition-group(*) {
+    animation-duration: 340ms;
+    animation-timing-function: cubic-bezier(0.2, 0.9, 0.3, 1);
+  }
+
+  &::view-transition-image-pair(player-cover) {
+    animation: player-cover-radius 340ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
   }
 }
 

@@ -92,7 +92,7 @@ const actualFallback = computed(() => (props.type === "artist" ? artistFallback 
       :class="type === 'artist' ? 'items-center' : ''"
     >
       <div
-        class="text-sm text-on-surface line-clamp-2 leading-snug text-pretty min-h-[2.75em]"
+        class="text-sm text-on-surface line-clamp-2 leading-snug text-pretty"
         :class="type === 'artist' ? 'text-center w-full' : ''"
       >
         {{ item.title }}

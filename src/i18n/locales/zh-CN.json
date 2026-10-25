@@ -1458,7 +1458,9 @@
       "exclusiveModeTitle": "切换到独占模式",
       "exclusiveModeContent": "独占模式绕过系统混音器，优先使用音源采样率与位深，适合外接 DAC / Hi-Fi 设备。播放器的音量、均衡器等处理仍然生效，不保证逐位无损输出。独占期间其他应用可能无法播放声音；独占不可用时会尝试共享模式，若设备被其他应用独占，共享模式也可能无法播放。确定切换吗？",
       "preloadCacheTitle": "开启预载所需的缓存？",
-      "preloadCacheContent": "歌曲预载需要缓存下一首音频。继续将同时开启歌曲缓存和流媒体缓存，可能增加网络流量和磁盘占用"
+      "preloadCacheContent": "歌曲预载需要缓存下一首音频。继续将同时开启歌曲缓存和流媒体缓存，可能增加网络流量和磁盘占用",
+      "disableSongCacheTitle": "关闭歌曲缓存？",
+      "disableSongCacheContent": "预载下一首歌曲与交叉过渡依赖歌曲缓存，关闭后会一并停用"
     },
     "useAMSpring": {
       "label": "弹簧动画调试开关",

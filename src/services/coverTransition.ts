@@ -2,8 +2,6 @@ import type { Router, RouteLocationNormalized } from "vue-router";
 import type { CoverItem } from "@/types/artist";
 
 type CoverPreview = Pick<CoverItem, "title" | "cover" | "trackCount">;
-/** TypeScript DOM 库尚未声明元素级过渡，局部复用已有原生签名 */
-type TransitionScope = HTMLElement & Partial<Pick<Document, "startViewTransition">>;
 
 /** 只保留一次导航的头部摘要，不缓存歌曲和页面 DOM */
 interface CoverNavigation {
@@ -59,7 +57,7 @@ export const getCoverPreview = (path: string): CoverPreview | null =>
   preview?.detailPath === path ? preview.header : null;
 
 /**
- * 将共享封面过渡限定在主内容区，其余路由继续使用原有动效
+ * 在路由切换时共享封面，其余路由继续使用原有动效
  * @param router - 应用路由
  * @param getScope - 主内容容器
  * @param restoreScroll - 新页面挂载后的滚动位置恢复
@@ -67,7 +65,7 @@ export const getCoverPreview = (path: string): CoverPreview | null =>
  */
 export const installCoverTransitions = (
   router: Router,
-  getScope: () => TransitionScope | null,
+  getScope: () => HTMLElement | null,
   restoreScroll: () => void,
 ): (() => void) => {
   captureEnabled = true;
@@ -88,7 +86,8 @@ export const installCoverTransitions = (
     releaseNavigation?.();
     releaseNavigation = null;
     for (const cover of covers) cover.removeAttribute("data-cover-shared");
-    getScope()?.style.removeProperty("--cover-transition-radius");
+    document.documentElement.removeAttribute("data-cover-transition");
+    document.documentElement.style.removeProperty("--cover-transition-radius");
     covers = [];
     preview = null;
     coverTransitionActive.value = false;
@@ -116,7 +115,14 @@ export const installCoverTransitions = (
   const removeBeforeResolve = router.beforeResolve(async (to) => {
     const current = navigation;
     const scope = getScope();
-    if (to !== targetRoute || !current || !scope?.startViewTransition || document.hidden) {
+    if (
+      to !== targetRoute ||
+      !current ||
+      !scope ||
+      !document.startViewTransition ||
+      document.hidden ||
+      document.documentElement.hasAttribute("data-player-transition")
+    ) {
       return;
     }
 
@@ -129,7 +135,10 @@ export const installCoverTransitions = (
 
     covers.push(cover);
     cover.setAttribute("data-cover-shared", "");
-    scope.style.setProperty("--cover-transition-radius", getComputedStyle(cover).borderRadius);
+    document.documentElement.style.setProperty(
+      "--cover-transition-radius",
+      getComputedStyle(cover).borderRadius,
+    );
     if (entering) preview = current;
     coverTransitionActive.value = true;
 
@@ -137,7 +146,8 @@ export const installCoverTransitions = (
     const { promise: started, resolve: release } = Promise.withResolvers<void>();
     finishUpdate = committed.resolve;
     releaseNavigation = release;
-    const active = scope.startViewTransition(async () => {
+    document.documentElement.setAttribute("data-cover-transition", entering ? "enter" : "back");
+    const active = document.startViewTransition(async () => {
       release();
       if (releaseNavigation === release) releaseNavigation = null;
       await committed.promise;

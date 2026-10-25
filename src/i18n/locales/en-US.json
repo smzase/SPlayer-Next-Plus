@@ -1459,7 +1459,9 @@
       "exclusiveModeTitle": "Switch to Exclusive Mode",
       "exclusiveModeContent": "Exclusive mode bypasses the system mixer and prefers the source sample rate and bit depth, making it suitable for external DACs / Hi-Fi gear. Player volume, EQ and other processing still apply, so bit-perfect output is not guaranteed. Other apps may be unable to play audio while exclusive. If exclusive mode is unavailable, shared mode will be attempted; it may also fail if another app holds the device exclusively. Switch anyway?",
       "preloadCacheTitle": "Enable the caches required for preloading?",
-      "preloadCacheContent": "Preloading requires caching the next track's audio. Continuing will enable both song caching and streaming caching, which may increase network traffic and disk usage"
+      "preloadCacheContent": "Preloading requires caching the next track's audio. Continuing will enable both song caching and streaming caching, which may increase network traffic and disk usage",
+      "disableSongCacheTitle": "Disable Song Cache?",
+      "disableSongCacheContent": "Preloading and crossfade depend on the song cache and will be disabled as well"
     },
     "useAMSpring": {
       "label": "Spring Animation Debug Switch",

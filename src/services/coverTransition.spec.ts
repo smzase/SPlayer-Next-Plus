@@ -31,7 +31,7 @@ const setupNavigation = async () => {
     const ready = Promise.resolve().then(update);
     return { ready, finished: completed.promise, skipTransition: completed.resolve };
   });
-  Object.assign(scope, { startViewTransition: start });
+  Object.assign(document, { startViewTransition: start });
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -58,6 +58,8 @@ afterEach(async () => {
   dispose?.();
   dispose = undefined;
   await flushPromises();
+  delete (document as Partial<Document>).startViewTransition;
+  document.documentElement.removeAttribute("data-player-transition");
   document.body.innerHTML = "";
   vi.restoreAllMocks();
 });
@@ -67,19 +69,28 @@ describe("封面共享过渡回归", () => {
     "%s 进入和返回时匹配原始导航，结束后清理状态",
     async (target) => {
       const { router, scope, start } = await setupNavigation();
+      scope.querySelector<HTMLElement>("[data-cover-key]")!.style.borderRadius = "16px";
       captureCover(album, "cover");
       await router.push(target);
       await flushPromises();
       expect(getCoverPreview(target)?.title).toBe(album.title);
       expect(coverTransitionActive.value).toBe(true);
+      expect(document.documentElement.getAttribute("data-cover-transition")).toBe("enter");
+      expect(document.documentElement.style.getPropertyValue("--cover-transition-radius")).toBe(
+        "16px",
+      );
+      expect(scope.style.getPropertyValue("--cover-transition-radius")).toBe("");
       expect(scope.querySelector("[data-cover-hero][data-cover-shared]")).not.toBeNull();
       start.mock.results[0].value.skipTransition();
       await flushPromises();
       expect(coverTransitionActive.value).toBe(false);
+      expect(document.documentElement.hasAttribute("data-cover-transition")).toBe(false);
+      expect(document.documentElement.style.getPropertyValue("--cover-transition-radius")).toBe("");
       expect(scope.querySelector("[data-cover-shared]")).toBeNull();
       await router.push("/");
       await flushPromises();
       expect(start).toHaveBeenCalledTimes(2);
+      expect(document.documentElement.getAttribute("data-cover-transition")).toBe("back");
       expect(
         scope.querySelector('[data-cover-key="cover"]')!.hasAttribute("data-cover-shared"),
       ).toBe(true);
@@ -101,20 +112,29 @@ describe("封面共享过渡回归", () => {
     expect(getCoverPreview(path)).toBeNull();
   });
 
-  it.each(["关闭动画", "缺少原生 API"])("%s 时继续普通导航", async (condition) => {
-    const { router, scope, start } = await setupNavigation();
-    if (condition === "关闭动画") {
-      dispose?.();
-      dispose = undefined;
-    } else Object.assign(scope, { startViewTransition: undefined });
-    const timer = vi.spyOn(window, "setTimeout");
-    captureCover(album, "cover");
-    if (condition === "关闭动画") expect(timer).not.toHaveBeenCalled();
-    await router.push(path);
-    expect(start).not.toHaveBeenCalled();
-    expect(coverTransitionActive.value).toBe(false);
-    expect(getCoverPreview(path)).toBeNull();
-  });
+  it.each(["关闭动画", "缺少原生 API", "窗口隐藏", "播放器正在过渡"])(
+    "%s 时继续普通导航",
+    async (condition) => {
+      const { router, start } = await setupNavigation();
+      if (condition === "关闭动画") {
+        dispose?.();
+        dispose = undefined;
+      } else if (condition === "缺少原生 API") {
+        Object.assign(document, { startViewTransition: undefined });
+      } else if (condition === "窗口隐藏") {
+        vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+      } else {
+        document.documentElement.setAttribute("data-player-transition", "expand");
+      }
+      const timer = vi.spyOn(window, "setTimeout");
+      captureCover(album, "cover");
+      if (condition === "关闭动画") expect(timer).not.toHaveBeenCalled();
+      await router.push(path);
+      expect(start).not.toHaveBeenCalled();
+      expect(coverTransitionActive.value).toBe(false);
+      expect(getCoverPreview(path)).toBeNull();
+    },
+  );
 
   it("连续点击时，取消的旧快照回调不能提前提交新导航", async () => {
     const { router, start } = await setupNavigation();
