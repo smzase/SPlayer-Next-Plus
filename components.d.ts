@@ -342,6 +342,7 @@ declare module 'vue' {
     StatsDonutChart: typeof import('./src/components/stats/StatsDonutChart.vue')['default']
     StatsHeatmap: typeof import('./src/components/stats/StatsHeatmap.vue')['default']
     StatsOverview: typeof import('./src/components/stats/StatsOverview.vue')['default']
+    StatsRankRow: typeof import('./src/components/stats/StatsRankRow.vue')['default']
     StatsTopList: typeof import('./src/components/stats/StatsTopList.vue')['default']
     StepAgreement: typeof import('./src/components/onboarding/StepAgreement.vue')['default']
     StepHotkeys: typeof import('./src/components/onboarding/StepHotkeys.vue')['default']

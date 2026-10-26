@@ -102,6 +102,50 @@ export interface TopArtist {
   playCount: number;
 }
 
+/** 网易云统计排行周期 */
+export type CloudStatsPeriod = "week" | "month" | "all";
+
+/** 网易云曲风分布 */
+export interface CloudGenreStat {
+  /** 曲风名称 */
+  name: string;
+  /** 网易云报告中的原始占比 */
+  percent: number;
+}
+
+/** 云端报告覆盖的起止时间（毫秒） */
+export interface CloudReportPeriod {
+  startTime: number;
+  endTime: number;
+}
+
+/** 网易云每日音乐收听时长 */
+export interface CloudDailyListening {
+  day: string;
+  durationMs: number;
+  reachLimit: boolean;
+}
+
+/** 网易云报告提供的六个收听时段 */
+export type CloudTimeBand =
+  "early_morning" | "morning" | "noon" | "afternoon" | "night" | "deep_night";
+
+/** 网易云分时段音乐收听时长 */
+export interface CloudTimeListening {
+  period: CloudTimeBand;
+  durationMs: number;
+}
+
+/** 云端图表数据，缺失日期不等同于零收听 */
+export interface CloudListeningCharts {
+  daily: CloudDailyListening[];
+  timeBands: CloudTimeListening[];
+  genres: CloudGenreStat[];
+  timePeriod?: CloudReportPeriod;
+  genrePeriod?: CloudReportPeriod;
+  errors: { daily: boolean; timeBands: boolean; genres: boolean };
+}
+
 /** preload 暴露的统计 API */
 export interface StatsApi {
   /** 记录一次播放 */

@@ -6,6 +6,7 @@ import { useUpdateStore } from "@/stores/update";
 import { useMessageStore } from "@/stores/message";
 import { useUserStore } from "@/stores/user";
 import { useAudioRecognitionStore } from "@/stores/audioRecognition";
+import { useStatsStore } from "@/stores/stats";
 import type { DropdownMenuItem } from "@/components/ui/SDropdownMenu.vue";
 import IconSun from "~icons/lucide/sun";
 import IconMoon from "~icons/lucide/moon";
@@ -14,6 +15,8 @@ import IconRefreshCw from "~icons/lucide/refresh-cw";
 import IconTerminal from "~icons/lucide/terminal";
 import IconSettings from "~icons/lucide/settings";
 import IconScaling from "~icons/lucide/scaling";
+import IconStatsLocal from "~icons/sp/stats-local";
+import IconStatsNetease from "~icons/sp/stats-netease";
 
 const router = useRouter();
 const route = useRoute();
@@ -24,6 +27,7 @@ const update = useUpdateStore();
 const message = useMessageStore();
 const user = useUserStore();
 const audioRecognition = useAudioRecognitionStore();
+const statsStore = useStatsStore();
 const messageOpen = ref(false);
 const messagePanelResizing = ref(false);
 const messagePanelSize = reactive({
@@ -37,6 +41,11 @@ const { isBorderless } = useWindowControls();
 const openAudioRecognition = (): void => {
   if (!audioRecognition.isActive) void audioRecognition.start();
   if (route.name !== "audio-recognition") void router.push({ name: "audio-recognition" });
+};
+
+/** 切换统计页的本地与网易云数据源 */
+const toggleStatsSource = (): void => {
+  statsStore.setSource(statsStore.source === "local" ? "netease" : "local");
 };
 
 type MessagePanelResizeAxis = "width" | "height" | "both";
@@ -277,6 +286,26 @@ onBeforeUnmount(() => {
         @click="openAudioRecognition"
       >
         <template #icon><IconLucideMicVocal /></template>
+      </SButton>
+      <SButton
+        v-if="route.name === 'stats'"
+        class="app-no-drag shrink-0"
+        :type="statsStore.source === 'netease' ? 'primary' : 'default'"
+        variant="tertiary"
+        circle
+        :size="40"
+        :icon-size="20"
+        :title="t(statsStore.source === 'netease' ? 'stats.switchToLocal' : 'stats.switchToCloud')"
+        :aria-label="
+          t(statsStore.source === 'netease' ? 'stats.switchToLocal' : 'stats.switchToCloud')
+        "
+        :aria-pressed="statsStore.source === 'netease'"
+        @click="toggleStatsSource"
+      >
+        <template #icon>
+          <IconStatsNetease v-if="statsStore.source === 'netease'" />
+          <IconStatsLocal v-else />
+        </template>
       </SButton>
       <SButton
         v-if="update.hasUpdate"

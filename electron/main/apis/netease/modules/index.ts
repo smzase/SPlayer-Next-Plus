@@ -43,6 +43,9 @@ import user_record from "./user_record";
 import record_recent_song from "./record_recent_song";
 import user_subcount from "./user_subcount";
 import user_audio from "./user_audio";
+import listen_data_realtime_report from "./listen_data_realtime_report";
+import listen_data_report from "./listen_data_report";
+import listen_data_song_play_rank from "./listen_data_song_play_rank";
 
 // 消息
 import pl_count from "./pl_count";
@@ -177,6 +180,9 @@ export const modules: Record<string, NeteaseModule> = {
   user_update,
   user_blacklist_update,
   user_audio,
+  listen_data_realtime_report,
+  listen_data_report,
+  listen_data_song_play_rank,
 
   pl_count,
   msg_private,

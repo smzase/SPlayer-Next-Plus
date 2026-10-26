@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import type { DailyPlayStats, HourlyPlayStats, LibraryStats } from "@shared/types/stats";
+import type {
+  CloudListeningCharts,
+  DailyPlayStats,
+  HourlyPlayStats,
+  LibraryStats,
+} from "@shared/types/stats";
 import { isLosslessCodec } from "@/utils/quality";
 import StatsDonutChart from "./StatsDonutChart.vue";
 import IconLucideMusic from "~icons/lucide/music";
@@ -13,6 +18,10 @@ const props = defineProps<{
   stats: LibraryStats | null;
   /** 数据是否仍在加载 */
   loading: boolean;
+  /** 是否展示网易云曲风卡片 */
+  cloud?: boolean;
+  /** 网易云按真实报告周期返回的图表 */
+  cloudCharts?: CloudListeningCharts;
 }>();
 
 const { t, locale } = useI18n();
@@ -22,7 +31,9 @@ const HEATMAP_DAYS = 90;
 
 interface HeatCell {
   day: string;
-  playCount: number;
+  value: number;
+  available: boolean;
+  reachLimit: boolean;
   date: Date;
 }
 
@@ -45,13 +56,23 @@ interface CodecVisual {
  * @returns 两位数补零字符串
  */
 const pad2 = (value: number): string => String(value).padStart(2, "0");
+/**
+ * 生成本地日期键
+ * @param d - 日期
+ * @returns 年月日字符串
+ */
 const dayKey = (d: Date): string =>
   `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
 /** 按周排列的近 90 天网格 */
 const heatWeeks = computed<(HeatCell | null)[][]>(() => {
   const map = new Map(props.daily.map((item) => [item.day, item.playCount]));
-  const today = new Date();
+  const cloudMap = new Map(props.cloudCharts?.daily.map((item) => [item.day, item]) ?? []);
+  const now = new Date();
+  const chinaNow = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  const today = props.cloud
+    ? new Date(chinaNow.getUTCFullYear(), chinaNow.getUTCMonth(), chinaNow.getUTCDate())
+    : now;
   today.setHours(0, 0, 0, 0);
   const start = new Date(today);
   start.setDate(start.getDate() - (HEATMAP_DAYS - 1));
@@ -66,7 +87,14 @@ const heatWeeks = computed<(HeatCell | null)[][]>(() => {
       const date = new Date(start);
       date.setDate(start.getDate() + (i - lead));
       const key = dayKey(date);
-      week.push({ day: key, playCount: map.get(key) ?? 0, date });
+      const cloudDay = cloudMap.get(key);
+      week.push({
+        day: key,
+        value: props.cloud ? (cloudDay?.durationMs ?? 0) : (map.get(key) ?? 0),
+        available: !props.cloud || !!cloudDay,
+        reachLimit: cloudDay?.reachLimit ?? false,
+        date,
+      });
     }
     if (week.length === 7 || i === total - 1) {
       weeks.push(week);
@@ -76,11 +104,18 @@ const heatWeeks = computed<(HeatCell | null)[][]>(() => {
   return weeks;
 });
 
-const maxDayPlays = computed(() => Math.max(0, ...props.daily.map((item) => item.playCount)));
+const maxDayPlays = computed(() =>
+  Math.max(
+    0,
+    ...(props.cloud
+      ? (props.cloudCharts?.daily.map((item) => item.durationMs) ?? [])
+      : props.daily.map((item) => item.playCount)),
+  ),
+);
 
 /**
- * 按播放次数占峰值比例映射格子背景色
- * @param playCount - 播放次数
+ * 按统计值占峰值比例映射格子背景色
+ * @param playCount - 播放次数或收听毫秒数
  * @returns 背景色样式
  */
 const cellStyle = (playCount: number): Record<string, string> => {
@@ -117,10 +152,16 @@ const rowLabels = computed<string[]>(() => {
 /**
  * 生成格子提示文本
  * @param cell - 格子数据，空占位为 null
- * @returns 日期 + 播放次数
+ * @returns 日期与次数或收听时长
  */
-const dayTooltip = (cell: HeatCell | null): string =>
-  `${cell?.day ?? ""} · ${t("stats.plays", { count: cell?.playCount ?? 0 }, cell?.playCount ?? 0)}`;
+const dayTooltip = (cell: HeatCell | null): string => {
+  if (!cell) return "";
+  if (!cell.available) return cell.day + " · " + t("stats.notReported");
+  const value = props.cloud
+    ? t("stats.listenedMinutes", { count: cell.value / 60_000 }) + (cell.reachLimit ? "+" : "")
+    : t("stats.plays", { count: cell.value }, cell.value);
+  return cell.day + " · " + value;
+};
 
 /**
  * 取某列某行的播放次数
@@ -128,35 +169,40 @@ const dayTooltip = (cell: HeatCell | null): string =>
  * @param dow - 行号（1-7）
  * @returns 播放次数，空格子为 0
  */
-const cellPlayCount = (week: (HeatCell | null)[], dow: number): number =>
-  week[dow - 1]?.playCount ?? 0;
+const cellPlayCount = (week: (HeatCell | null)[], dow: number): number => week[dow - 1]?.value ?? 0;
 
-const hourlyMax = computed(() => Math.max(0, ...props.hourly.map((item) => item.playCount)));
-const hourlyTotal = computed(() => props.hourly.reduce((sum, item) => sum + item.playCount, 0));
-const peakHour = computed(() =>
-  props.hourly.reduce<HourlyPlayStats | null>(
-    (peak, item) => (!peak || item.playCount > peak.playCount ? item : peak),
-    null,
-  ),
+/** 本地按小时计次，网易云按官方六个时段计收听时长 */
+const timeValues = computed(() =>
+  props.cloud
+    ? (props.cloudCharts?.timeBands.map((band) => band.durationMs) ?? [])
+    : Array.from(
+        { length: 24 },
+        (_, hour) => props.hourly.find((item) => item.hour === hour)?.playCount ?? 0,
+      ),
 );
-/** 播放时段折线坐标 */
-const hourlyPoints = computed<ChartPoint[]>(() =>
-  Array.from({ length: 24 }, (_, hour) => {
-    const count = props.hourly.find((item) => item.hour === hour)?.playCount ?? 0;
-    const ratio = hourlyMax.value ? count / hourlyMax.value : 0;
-    return {
-      x: (hour / 23) * 240,
-      y: 120 - ratio * 104,
-    };
-  }),
+const timeMax = computed(() => Math.max(0, ...timeValues.value));
+const timeTotal = computed(() => timeValues.value.reduce((sum, value) => sum + value, 0));
+const peakIndex = computed(() => timeValues.value.indexOf(timeMax.value));
+const peakHour = computed(() => props.hourly.find((item) => item.hour === peakIndex.value));
+const peakTimeLabel = computed(() =>
+  props.cloud
+    ? t("stats.timeBands." + props.cloudCharts?.timeBands[peakIndex.value]?.period)
+    : String(peakIndex.value).padStart(2, "0") + ":00",
 );
-const peakPoint = computed(() => (peakHour.value ? hourlyPoints.value[peakHour.value.hour] : null));
+/** 播放时段曲线坐标 */
+const timePoints = computed<ChartPoint[]>(() =>
+  timeValues.value.map((value, index, values) => ({
+    x: values.length === 1 ? 120 : (index / (values.length - 1)) * 240,
+    y: 120 - (timeMax.value ? value / timeMax.value : 0) * 104,
+  })),
+);
+const peakPoint = computed(() => timePoints.value[peakIndex.value]);
 const peakLabelX = computed(() => Math.min(212, Math.max(28, peakPoint.value?.x ?? 0)));
 const peakLabelY = computed(() => Math.max(20, (peakPoint.value?.y ?? 0) - 20));
 
 /** 使用 Catmull-Rom 转贝塞尔曲线平滑连接相邻时段 */
-const hourlyLinePath = computed(() => {
-  const points = hourlyPoints.value;
+const timeLinePath = computed(() => {
+  const points = timePoints.value;
   if (points.length === 0) return "";
   let path = `M ${points[0].x} ${points[0].y}`;
   for (let index = 0; index < points.length - 1; index++) {
@@ -171,7 +217,7 @@ const hourlyLinePath = computed(() => {
   return path;
 });
 
-const hourlyAreaPath = computed(() => `${hourlyLinePath.value} L 240 124 L 0 124 Z`);
+const timeAreaPath = computed(() => `${timeLinePath.value} L 240 124 L 0 124 Z`);
 
 const codecs = computed(() => (props.stats?.codecs ?? []).filter((item) => item.codec.trim()));
 const chartCodecs = computed(() => codecs.value.slice(0, 4));
@@ -197,18 +243,45 @@ const losslessPercent = computed(() =>
   totalCodecCount.value ? (losslessCount.value / totalCodecCount.value) * 100 : 0,
 );
 
+/**
+ * 格式化编码占比
+ * @param count - 曲目数
+ * @returns 百分比文本
+ */
 const codecPercent = (count: number): string => {
   if (!totalCodecCount.value) return "0%";
   return `${((count / totalCodecCount.value) * 100).toFixed(1)}%`;
 };
 
+/**
+ * 生成编码标签
+ * @param codec - 编码名
+ * @returns 显示名称
+ */
 const codecLabel = (codec: string): string => {
   return codec ? codec.toUpperCase() : t("stats.unknown");
 };
+const reportMonth = computed(() => {
+  const period = props.cloudCharts?.genrePeriod ?? props.cloudCharts?.timePeriod;
+  return period
+    ? new Intl.DateTimeFormat(locale.value, {
+        year: "numeric",
+        month: "short",
+        timeZone: "Asia/Shanghai",
+      }).format(period.startTime)
+    : "";
+});
 </script>
 
 <template>
-  <div class="grid grid-cols-[300px_minmax(0,1fr)] gap-5 xl:grid-cols-[300px_minmax(0,1fr)_400px]">
+  <div
+    class="grid gap-5"
+    :class="
+      cloud
+        ? 'grid-cols-[280px_minmax(0,1fr)_minmax(0,1fr)]'
+        : 'grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(240px,1fr)_minmax(240px,1fr)]'
+    "
+  >
     <!-- 近 90 天热力图 -->
     <SCard radius="xl" class="flex h-52 min-w-0 flex-col gap-3">
       <div class="flex items-baseline justify-between gap-3">
@@ -220,7 +293,7 @@ const codecLabel = (codec: string): string => {
         </span>
       </div>
 
-      <div class="mx-auto flex min-h-0 w-fit flex-1 items-center gap-2">
+      <div v-if="!loading" class="mx-auto flex min-h-0 w-fit flex-1 items-center gap-2">
         <div class="grid shrink-0 grid-rows-[1.25rem_repeat(7,13px)] gap-y-0.5">
           <div />
           <div
@@ -257,7 +330,13 @@ const codecLabel = (codec: string): string => {
             >
               <div
                 class="h-full min-h-0 w-full rounded-[3px]"
-                :class="week[dow - 1] ? 'cursor-default' : 'opacity-0'"
+                :class="
+                  !week[dow - 1]
+                    ? 'opacity-0'
+                    : !week[dow - 1]?.available
+                      ? 'opacity-30 ring-1 ring-inset ring-outline-variant'
+                      : 'cursor-default'
+                "
                 :style="cellStyle(cellPlayCount(week, dow))"
               />
             </STooltip>
@@ -265,7 +344,11 @@ const codecLabel = (codec: string): string => {
         </div>
       </div>
 
+      <div v-else class="flex flex-1 items-center justify-center">
+        <SLoading class="size-6 text-primary/60" />
+      </div>
       <div class="flex items-center justify-center gap-2 text-xs text-on-surface-variant/50">
+        <span v-if="cloud">{{ t("stats.minutesUnit") }}</span>
         <span>{{ t("stats.less") }}</span>
         <div
           v-for="level in 5"
@@ -283,14 +366,15 @@ const codecLabel = (codec: string): string => {
         <h3 class="text-base font-semibold text-on-surface">
           {{ t("stats.listeningHours") }}
         </h3>
+        <span v-if="cloud" class="text-xs text-on-surface-variant/45">{{ reportMonth }}</span>
       </div>
 
       <div class="relative min-h-0 flex-1">
         <svg class="absolute inset-0 size-full" viewBox="0 0 240 128" preserveAspectRatio="none">
-          <template v-if="!loading && hourlyTotal > 0">
-            <path :d="hourlyAreaPath" fill="rgb(var(--s-primary) / 0.08)" />
+          <template v-if="!loading && timeTotal > 0">
+            <path :d="timeAreaPath" fill="rgb(var(--s-primary) / 0.08)" />
             <path
-              :d="hourlyLinePath"
+              :d="timeLinePath"
               fill="none"
               stroke="rgb(var(--s-primary))"
               stroke-width="2"
@@ -300,49 +384,85 @@ const codecLabel = (codec: string): string => {
             />
           </template>
         </svg>
-        <!-- 最高点指示点 -->
+        <template v-if="cloud && !loading && timeTotal > 0">
+          <STooltip
+            v-for="(band, index) in cloudCharts?.timeBands"
+            :key="band.period"
+            :content="
+              t('stats.timeBands.' + band.period) +
+              ' · ' +
+              t('stats.listenedMinutes', { count: band.durationMs / 60_000 })
+            "
+          >
+            <div
+              class="absolute size-4 -translate-x-1/2 -translate-y-1/2 cursor-default rounded-full"
+              :style="{
+                left: (timePoints[index].x / 240) * 100 + '%',
+                top: (timePoints[index].y / 128) * 100 + '%',
+              }"
+            />
+          </STooltip>
+        </template>
         <div
-          v-if="!loading && hourlyTotal > 0 && peakHour"
+          v-if="!loading && timeTotal > 0 && peakPoint"
           class="pointer-events-none absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary ring-2 ring-surface-panel shadow-sm"
           :style="{
-            left: `${(hourlyPoints[peakHour.hour].x / 240) * 100}%`,
-            top: `${(hourlyPoints[peakHour.hour].y / 128) * 100}%`,
+            left: (peakPoint.x / 240) * 100 + '%',
+            top: (peakPoint.y / 128) * 100 + '%',
           }"
         />
-        <!-- 最高峰时段提示气泡 -->
         <div
-          v-if="!loading && hourlyTotal > 0 && peakHour"
+          v-if="!loading && timeTotal > 0"
           class="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-md bg-primary px-2 py-1 text-center text-[10px] font-semibold text-on-primary tabular-nums shadow-md"
           :style="{
-            left: `${(peakLabelX / 240) * 100}%`,
-            top: `${(peakLabelY / 128) * 100}%`,
+            left: (peakLabelX / 240) * 100 + '%',
+            top: (peakLabelY / 128) * 100 + '%',
           }"
         >
-          <span
-            class="block whitespace-nowrap text-[9px] font-medium leading-none text-on-primary/80"
-          >
+          <span class="block text-[9px] font-medium leading-none text-on-primary/80">
             {{ t("stats.peakListening") }}
           </span>
-          <span class="mt-1 block whitespace-nowrap text-xs font-bold leading-none">
-            {{ String(peakHour.hour).padStart(2, "0") }}:00
-          </span>
+          <span class="mt-1 block text-xs font-bold leading-none">{{ peakTimeLabel }}</span>
+        </div>
+        <div v-if="loading" class="absolute inset-0 flex items-center justify-center">
+          <SLoading class="size-6 text-primary/60" />
         </div>
         <div
-          v-if="!loading && hourlyTotal === 0"
+          v-else-if="timeTotal === 0"
           class="absolute inset-0 flex items-center justify-center text-sm text-on-surface-variant/40"
         >
-          {{ t("stats.noPlayHistory") }}
+          {{
+            t(
+              cloud && !cloudCharts?.timeBands.length
+                ? cloudCharts?.errors.timeBands
+                  ? "stats.chartFailed"
+                  : "stats.notReported"
+                : "stats.noPlayHistory",
+            )
+          }}
         </div>
       </div>
-
       <div class="flex justify-between text-[10px] text-on-surface-variant/40 tabular-nums">
-        <span>00</span>
-        <span>06</span>
-        <span>12</span>
-        <span>18</span>
-        <span>24</span>
+        <template v-if="cloud">
+          <span v-for="band in cloudCharts?.timeBands" :key="band.period">
+            {{ t("stats.timeBands." + band.period) }}
+          </span>
+        </template>
+        <template v-else>
+          <span>00</span>
+          <span>06</span>
+          <span>12</span>
+          <span>18</span>
+          <span>24</span>
+        </template>
       </div>
-      <p v-if="hourlyTotal > 0 && peakHour" class="text-center text-xs text-on-surface-variant/55">
+      <p v-if="cloud" class="text-center text-xs text-on-surface-variant/50">
+        {{ t("stats.minutesUnit") }}
+      </p>
+      <p
+        v-else-if="timeTotal > 0 && peakHour"
+        class="text-center text-xs text-on-surface-variant/55"
+      >
         {{
           t("stats.favoriteHour", {
             hour: String(peakHour.hour).padStart(2, "0"),
@@ -352,8 +472,48 @@ const codecLabel = (codec: string): string => {
       </p>
     </SCard>
 
-    <!-- 音质构成 -->
-    <SCard radius="xl" class="col-span-2 flex h-52 min-w-0 flex-col gap-3 xl:col-span-1">
+    <!-- 音质构成 / 网易云曲风 -->
+    <SCard v-if="props.cloud" radius="xl" class="flex h-52 min-w-0 flex-col gap-3">
+      <div class="flex items-baseline justify-between gap-3">
+        <h3 class="text-base font-semibold text-on-surface">{{ t("stats.cloudGenres") }}</h3>
+        <span class="text-xs text-on-surface-variant/45">{{ reportMonth }}</span>
+      </div>
+      <div
+        v-if="!loading && cloudCharts?.genres.length"
+        class="flex flex-1 flex-col justify-center gap-3"
+      >
+        <div v-for="genre in cloudCharts.genres" :key="genre.name" class="min-w-0">
+          <div class="min-w-0">
+            <div class="mb-1 flex items-center justify-between gap-2 text-xs">
+              <span class="truncate font-medium text-on-surface">{{ genre.name }}</span>
+              <span class="shrink-0 text-on-surface-variant/55 tabular-nums">
+                {{ genre.percent.toFixed(0) }}%
+              </span>
+            </div>
+            <div class="h-2 overflow-hidden rounded-full bg-primary/10">
+              <div
+                class="h-full rounded-full bg-primary"
+                :style="{ width: `${Math.min(100, genre.percent)}%` }"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-else-if="loading" class="flex min-h-0 flex-1 items-center justify-center">
+        <SLoading class="size-6 text-primary/60" />
+      </div>
+      <div
+        v-else
+        class="flex min-h-0 flex-1 items-center justify-center text-sm text-on-surface-variant/40"
+      >
+        {{ t(cloudCharts?.errors.genres ? "stats.chartFailed" : "stats.notReported") }}
+      </div>
+    </SCard>
+    <SCard
+      v-if="!props.cloud"
+      radius="xl"
+      class="flex h-52 min-w-0 flex-col gap-3 lg:col-span-2 xl:col-span-1"
+    >
       <div class="flex items-baseline justify-between gap-3">
         <h3 class="text-base font-semibold text-on-surface">
           {{ t("stats.audioQuality") }}

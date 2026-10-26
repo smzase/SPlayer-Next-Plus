@@ -2797,7 +2797,32 @@
     "favoriteHour": "你最喜欢在 {hour}:00 听歌，共计 {count} 首",
     "noPlayHistory": "暂无播放时段数据",
     "listeningActivity": "聆听足迹",
-    "last90Days": "近 90 天"
+    "last90Days": "近 90 天",
+    "cloudMode": "网易云统计",
+    "localMode": "本地统计",
+    "switchToCloud": "切换到网易云统计",
+    "switchToLocal": "切换到本地统计",
+    "periodWeek": "周",
+    "periodMonth": "月",
+    "periodAll": "总",
+    "monthly": "本月",
+    "cloudGenres": "月度曲风",
+    "cloudNoLogin": "登录网易云后查看云端统计",
+    "notReported": "网易云暂无报告数据",
+    "listenedMinutes": "收听 {count} 分钟",
+    "minutesUnit": "分钟",
+    "chartFailed": "数据加载失败",
+    "loadFailed": "部分统计加载失败，请重试",
+    "rankPeriod": "{name}的统计周期",
+    "aggregatedRank": "按云端歌曲榜汇总",
+    "timeBands": {
+      "early_morning": "清晨",
+      "morning": "上午",
+      "noon": "中午",
+      "afternoon": "下午",
+      "night": "晚上",
+      "deep_night": "深夜"
+    }
   },
   "errors": {
     "PERMISSION_DENIED": "当前账号没有执行此操作的权限",

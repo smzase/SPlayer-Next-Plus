@@ -213,11 +213,16 @@ export const fetchUserPageResources = async (
   };
 };
 
-/** 获取当前用户最近一周或所有时间的听歌排行 */
+/**
+ * 获取当前用户最近一周或所有时间的听歌排行
+ * @param uid - 当前用户 ID
+ * @param period - 听歌排行周期
+ * @returns 带播放次数的歌曲列表
+ */
 export const fetchUserListeningRank = async (
   uid: number,
   period: UserListeningRankPeriod,
-): Promise<Track[]> => {
+): Promise<(Track & { playCount: number })[]> => {
   const body = ensureOk(
     await neteaseApi.user_record({
       uid,

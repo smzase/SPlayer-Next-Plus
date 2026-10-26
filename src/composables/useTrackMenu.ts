@@ -29,6 +29,7 @@ import IconMoreHorizontal from "~icons/lucide/more-horizontal";
 import IconPuzzle from "~icons/lucide/puzzle";
 
 import IconLink2 from "~icons/lucide/link-2";
+import IconHeartPlus from "~icons/lucide/heart-plus";
 
 export interface TrackMenuOptions {
   /** 集合类型 */
@@ -55,6 +56,8 @@ export interface TrackMenuOptions {
   onRemoveFromCloud?: (track: Track) => void;
   /** 修正云盘歌曲信息回调 */
   onCloudMatch?: (track: Track) => void;
+  /** 添加到网易云喜欢的音乐 */
+  onAddToLiked?: (track: Track) => void;
 }
 
 /**
@@ -85,6 +88,7 @@ export const useTrackMenu = (
     const showCloudRemove = isCloudView && track.value?.cloud === true;
     const showCloudMatch = showCloudRemove && !!options.onCloudMatch;
     const canAddToPlaylist = source === "local" || source === "netease";
+    const canAddToLiked = source === "netease" && !!options.onAddToLiked;
     const isOnline = !!getTrackShareUrl(track.value);
     const base: DropdownMenuItem[] = [
       {
@@ -106,6 +110,12 @@ export const useTrackMenu = (
         icon: markRaw(IconListPlus),
         separator: showPlay,
         show: canAddToPlaylist,
+      },
+      {
+        key: "addToLiked",
+        label: t("search.lyricActions.addToLiked"),
+        icon: markRaw(IconHeartPlus),
+        show: canAddToLiked,
       },
       {
         key: "showInExplorer",
@@ -267,6 +277,9 @@ export const useTrackMenu = (
         break;
       case "addToPlaylist":
         options.onAddToPlaylist?.(current);
+        break;
+      case "addToLiked":
+        options.onAddToLiked?.(current);
         break;
       case "showInExplorer":
         if (current.cueAudioPath ?? current.path) {

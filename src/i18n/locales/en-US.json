@@ -2798,7 +2798,32 @@
     "favoriteHour": "You listen most often at {hour}:00, with {count} tracks in total",
     "noPlayHistory": "No listening-hour data yet",
     "listeningActivity": "Listening Activity",
-    "last90Days": "Last 90 days"
+    "last90Days": "Last 90 days",
+    "cloudMode": "NetEase stats",
+    "localMode": "Local stats",
+    "switchToCloud": "Switch to NetEase stats",
+    "switchToLocal": "Switch to local stats",
+    "periodWeek": "Week",
+    "periodMonth": "Month",
+    "periodAll": "All",
+    "monthly": "This month",
+    "cloudGenres": "Monthly genres",
+    "cloudNoLogin": "Log in to NetEase to view cloud stats",
+    "notReported": "No NetEase report available",
+    "listenedMinutes": "Listened for {count} minutes",
+    "minutesUnit": "Minutes",
+    "chartFailed": "Could not load data",
+    "loadFailed": "Some statistics could not be loaded. Please retry",
+    "rankPeriod": "Period for {name}",
+    "aggregatedRank": "Summed from the cloud song ranking",
+    "timeBands": {
+      "early_morning": "Dawn",
+      "morning": "Morning",
+      "noon": "Noon",
+      "afternoon": "Afternoon",
+      "night": "Evening",
+      "deep_night": "Night"
+    }
   },
   "errors": {
     "PERMISSION_DENIED": "This account does not have permission to perform this action",
