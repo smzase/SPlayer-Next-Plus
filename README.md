@@ -74,6 +74,11 @@
 
 - ………………更多功能正在构思中………………
 
+
+## 改客户端一定要亲自用✍️✍️✍️
+<img width="1821" height="1232" alt="PixPin_2026-10-28_18-48-49" src="https://github.com/user-attachments/assets/73eb64a7-597e-468e-a753-ed89bbb2e770" />
+
+
 ## 功能特性
 
 - 🎵 **广泛的格式支持** —— MP3、FLAC、WAV、AAC、OGG、APE 等，基于 FFmpeg 解码
