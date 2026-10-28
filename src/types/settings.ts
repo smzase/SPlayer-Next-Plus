@@ -56,6 +56,10 @@ export type SpringPreset =
 /** 歌词混合模式 */
 export type LyricBlendMode = "normal" | "screen" | "plus-lighter";
 
+/** 歌词底部信息的显示方式 */
+export type LyricBottomInfo =
+  "none" | "authors" | "songwriters" | "preferAuthors" | "preferSongwriters";
+
 /** 弹簧预设参数映射 */
 export const SPRING_PRESETS: Record<
   Exclude<SpringPreset, "custom">,
@@ -149,6 +153,8 @@ export interface LyricSettings {
   fontWeight: number;
   /** 歌词混合模式 */
   lyricBlendMode: LyricBlendMode;
+  /** 歌词底部信息 */
+  bottomInfo: LyricBottomInfo;
   /** 歌词字体 */
   fontFamily: string;
   /** 拉丁文字歌词字体（为空时跟随歌词字体） */

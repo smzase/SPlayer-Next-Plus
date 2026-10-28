@@ -105,6 +105,24 @@ describe("lyric loader", () => {
     window.api = mockWindowApi;
   });
 
+  it("保留当前歌词的创作者，替换歌词或重置时释放旧信息", () => {
+    const media = useMediaStore();
+    const content = `<tt xmlns="http://www.w3.org/ns/ttml"
+      xmlns:itunes="http://music.apple.com/lyric-ttml-internal">
+      <head><metadata><itunes:songwriters><itunes:songwriter>创作者</itunes:songwriter></itunes:songwriters></metadata></head>
+      <body><div><p begin="1s" end="3s">歌词正文</p></div></body></tt>`;
+    media.setLyric({ source: "online", format: "ttml" }, { content });
+    expect(media.lyricSongwriters).toEqual(["创作者"]);
+    media.setLyric({ source: "online", format: "lrc" }, { content: "[00:01.00]另一首歌词" });
+    expect(media.lyricSongwriters).toEqual([]);
+    media.setLyric({ source: "online", format: "ttml" }, { content });
+    media.resetLyricState();
+    expect(media.lyricSongwriters).toEqual([]);
+    media.setLyric({ source: "online", format: "ttml" }, { content });
+    media.clear();
+    expect(media.lyricSongwriters).toEqual([]);
+  });
+
   it("清理当前歌词缓存后重载并保留固定来源", async () => {
     const media = useMediaStore();
     const track = createTrack("clear_cache");

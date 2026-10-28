@@ -760,6 +760,7 @@
       "hint": "Positive values advance lyrics, in milliseconds"
     },
     "lyricCredit": "Lyrics by",
+    "songwriterCredit": "Songwriters:",
     "copyLyric": {
       "title": "Copy Lyrics",
       "contentLabel": "Content to copy",
@@ -1558,6 +1559,15 @@
     "fontWeight": {
       "label": "Font Weight",
       "description": "Lyric text weight"
+    },
+    "lyricBottomInfo": {
+      "label": "Bottom information",
+      "description": "Choose which songwriter and lyric author credits appear below the lyrics",
+      "none": "Hide all",
+      "authors": "Lyric authors only",
+      "songwriters": "Songwriters only",
+      "preferAuthors": "Prefer lyric authors",
+      "preferSongwriters": "Prefer songwriters"
     },
     "lyricBlendMode": {
       "label": "Lyric Blend Mode",

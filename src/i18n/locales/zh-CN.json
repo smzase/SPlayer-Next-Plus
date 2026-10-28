@@ -758,7 +758,8 @@
       "title": "歌词偏移",
       "hint": "正值为歌词提前，单位毫秒"
     },
-    "lyricCredit": "歌词制作",
+    "lyricCredit": "歌词作者：",
+    "songwriterCredit": "创作者：",
     "copyLyric": {
       "title": "复制歌词",
       "contentLabel": "要复制的内容",
@@ -1557,6 +1558,15 @@
     "fontWeight": {
       "label": "歌词字重",
       "description": "歌词文字粗细"
+    },
+    "lyricBottomInfo": {
+      "label": "底部信息",
+      "description": "控制歌词底部显示的歌曲创作者及歌词作者信息",
+      "none": "完全不显示",
+      "authors": "只显示歌词作者",
+      "songwriters": "只显示创作者",
+      "preferAuthors": "优先显示歌词作者",
+      "preferSongwriters": "优先显示创作者"
     },
     "lyricBlendMode": {
       "label": "歌词混合模式",

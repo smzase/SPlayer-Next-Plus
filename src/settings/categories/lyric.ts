@@ -213,7 +213,20 @@ const lyricCategory: SettingCategory = {
             { value: "screen", labelKey: "settings.lyricBlendMode.screen" },
             { value: "plus-lighter", labelKey: "settings.lyricBlendMode.plusLighter" },
           ],
-          defaultValue: "normal",
+          defaultValue: "screen",
+        },
+        {
+          key: "lyricBottomInfo",
+          type: "select",
+          binding: { store: "settings", path: "lyric.bottomInfo" },
+          options: [
+            { value: "none", labelKey: "settings.lyricBottomInfo.none" },
+            { value: "authors", labelKey: "settings.lyricBottomInfo.authors" },
+            { value: "songwriters", labelKey: "settings.lyricBottomInfo.songwriters" },
+            { value: "preferAuthors", labelKey: "settings.lyricBottomInfo.preferAuthors" },
+            { value: "preferSongwriters", labelKey: "settings.lyricBottomInfo.preferSongwriters" },
+          ],
+          defaultValue: "none",
         },
         {
           key: "showTranslation",

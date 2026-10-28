@@ -77,6 +77,9 @@ export const useMediaStore = defineStore("media", () => {
   /** 当前歌词文件制作者列表 */
   const lyricAuthors = ref<string[]>([]);
 
+  /** 当前歌词元数据中的歌曲创作者列表 */
+  const lyricSongwriters = ref<string[]>([]);
+
   /** 同步当前歌词源到主进程 */
   const syncToMain = (): void => {
     try {
@@ -160,6 +163,7 @@ export const useMediaStore = defineStore("media", () => {
     lyricContent.value = null;
     parsedLyric.value = [];
     lyricAuthors.value = [];
+    lyricSongwriters.value = [];
     lyricIndex.value = -1;
     lyricLoading.value = true;
     syncToMain();
@@ -186,6 +190,7 @@ export const useMediaStore = defineStore("media", () => {
   const setLyric = (source: LyricData, input: LyricInput | null): void => {
     let nextLines: LyricLine[] = [];
     let authors: string[] = [];
+    let songwriters: string[] = [];
     const settings = useSettingsStore();
     if (source && input) {
       try {
@@ -211,6 +216,7 @@ export const useMediaStore = defineStore("media", () => {
         authors = result.metadata.authors?.length
           ? result.metadata.authors
           : extractLyricAuthors(input.content, source.format);
+        songwriters = result.metadata.songwriters ?? [];
       } catch (e) {
         console.error("[media] parse lyric failed:", e);
         nextLines = [];
@@ -225,6 +231,7 @@ export const useMediaStore = defineStore("media", () => {
     }
     parsedLyric.value = nextLines;
     lyricAuthors.value = hasContent && source && input ? authors : [];
+    lyricSongwriters.value = hasContent ? songwriters : [];
     lyricIndex.value = -1;
     lyricLoading.value = false;
     syncToMain();
@@ -260,6 +267,7 @@ export const useMediaStore = defineStore("media", () => {
     lyricContent.value = null;
     parsedLyric.value = [];
     lyricAuthors.value = [];
+    lyricSongwriters.value = [];
     lyricLoading.value = false;
     lyricIndex.value = -1;
     syncToMain();
@@ -276,6 +284,7 @@ export const useMediaStore = defineStore("media", () => {
     lyricFormat,
     parsedLyric,
     lyricAuthors,
+    lyricSongwriters,
     lyricLoading,
     lyricIndex,
     setTrack,
