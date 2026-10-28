@@ -6,13 +6,11 @@ import { defaultSystemConfig } from "@shared/defaults/settings";
 import type { SystemConfig } from "@shared/types/settings";
 import type { ConfigPath, PathValue } from "./types";
 import { deepMerge, getByPath, setByPath } from "./utils";
-import { migrations } from "./migrations";
+import { migrateConfig } from "./migrations";
 import { configDir } from "@main/utils/paths";
 
 /** 配置文件路径 */
 const configPath = path.join(configDir, "settings.json");
-/** 配置版本键名 */
-const META_KEY = "__configVersion";
 
 /** 读取配置文件 */
 const readFile = (): Record<string, unknown> => {
@@ -63,19 +61,7 @@ const flush = (config: SystemConfig): void => {
  */
 const init = (): SystemConfig => {
   const raw = readFile();
-  const data = deepMerge(defaultSystemConfig, raw);
-
-  let currentVersion: number = (raw[META_KEY] as number) ?? 0;
-  const pending = migrations
-    .filter((m) => m.version > currentVersion)
-    .sort((a, b) => a.version - b.version);
-  for (const m of pending) {
-    m.migrate(data);
-    currentVersion = m.version;
-  }
-  if (pending.length > 0) {
-    (data as unknown as Record<string, unknown>)[META_KEY] = currentVersion;
-  }
+  const data = migrateConfig(deepMerge(defaultSystemConfig, raw));
 
   // 初始化立即落盘
   flushImmediate(data);
@@ -121,14 +107,17 @@ export const store = {
 
   /** 清空配置 */
   clear(): void {
-    data = structuredClone(defaultSystemConfig);
+    data = migrateConfig(structuredClone(defaultSystemConfig));
     flush(data);
   },
 
-  /** 用导入的配置替换当前配置 */
+  /**
+   * 用导入的配置替换当前配置并迁移旧字段
+   * @param input - 导入的配置数据
+   */
   replaceAll(input: unknown): void {
     const raw = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-    data = deepMerge(defaultSystemConfig, raw);
+    data = migrateConfig(deepMerge(defaultSystemConfig, raw));
     flushImmediate(data);
   },
 

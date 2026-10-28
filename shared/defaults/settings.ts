@@ -1,6 +1,7 @@
 import type { SystemConfig } from "../types/settings";
 import { defaultPluginsConfig } from "./plugin-api";
 import { defaultHotkeyConfig } from "./hotkeys";
+import { DEFAULT_AMLL_DB_SERVERS } from "./lyrics";
 
 /**
  * 灵动岛基准高度（缩放比例 = 1 时的物理像素，等于"主行高度")
@@ -106,7 +107,7 @@ export const defaultSystemConfig: SystemConfig = {
   },
   lyric: {
     enableOnlineTTMLLyric: false,
-    amllDbServer: "https://amlldb.bikonoo.com/%p/%s.ttml",
+    amllDbServer: [...DEFAULT_AMLL_DB_SERVERS],
   },
   localLyric: {
     enableLocalTTMLOverride: false,

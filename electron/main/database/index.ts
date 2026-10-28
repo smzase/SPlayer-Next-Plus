@@ -31,6 +31,12 @@ export const initDatabase = (): void => {
     db.exec("DROP TABLE lyric_cache");
   }
 
+  // 旧 TTML 缓存未记录来源，重建以免跨源复用未命中结果
+  const ttmlCols = db.prepare("PRAGMA table_info(lyric_ttml_cache)").all() as { name: string }[];
+  if (ttmlCols.length > 0 && !ttmlCols.some((column) => column.name === "source")) {
+    db.exec("DROP TABLE lyric_ttml_cache");
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS tracks (
       id TEXT PRIMARY KEY,
@@ -84,9 +90,10 @@ export const initDatabase = (): void => {
     CREATE TABLE IF NOT EXISTS lyric_ttml_cache (
       platform TEXT NOT NULL,
       id TEXT NOT NULL,
+      source TEXT NOT NULL,
       content TEXT,
       fetched_at INTEGER NOT NULL,
-      PRIMARY KEY (platform, id)
+      PRIMARY KEY (platform, id, source)
     );
 
     CREATE TABLE IF NOT EXISTS song_cache (

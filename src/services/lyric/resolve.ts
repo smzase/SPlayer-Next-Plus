@@ -6,6 +6,7 @@ import type { Platform } from "@shared/types/platform";
 import { isPlatform } from "@shared/types/platform";
 import { detectFormat } from "lyric-kit";
 import { useSettingsStore } from "@/stores/settings";
+import { useLyricPreferenceStore } from "@/stores/lyricPreference";
 import { usePluginsStore } from "@/stores/plugins";
 import { DEFAULT_LYRIC_FORMAT_ORDER, DEFAULT_LYRIC_SOURCE_ORDER } from "@/types/settings";
 import { requestPlatformLyric, requestStreamingLyric, requestTTMLOverlay } from "./request";
@@ -40,8 +41,13 @@ const toOnlineResult = (data: LyricMatchResult): OnlineResult => ({
   },
 });
 
-/** 请求并转换指定平台歌词 */
-const resolvePlatformLyric = async (
+/**
+ * 请求并转换指定平台歌词
+ * @param platform - 歌词平台
+ * @param track - 歌曲信息
+ * @returns 平台歌词，未命中时为 null
+ */
+export const resolvePlatformLyric = async (
   platform: Platform,
   track: Track,
 ): Promise<OnlineResult | null> => {
@@ -137,12 +143,12 @@ export const resolveOnlineByPreference = async (
 ): Promise<OnlineResult | null> => {
   if (track.source === "plugin") return null;
   const settings = useSettingsStore();
-  const preference = settings.lyric.lyricSourcePreference;
+  const preference = useLyricPreferenceStore().getPreference(track);
   const isCurrent = options.shouldContinue ?? (() => true);
   if (preference === "self") {
     return isPlatform(track.source) ? resolvePlatformLyric(track.source, track) : null;
   }
-  if (preference !== "auto") {
+  if (isPlatform(preference)) {
     const preferred = await resolvePlatformLyric(preference, track);
     if (!isCurrent()) return null;
     if (preferred) return preferred;
@@ -213,14 +219,18 @@ const shouldTryTTMLByFormat = (mainFormat: LyricFormat): boolean => {
  * 获取在线歌词对应的 TTML 覆盖版本
  * @param track - 歌曲信息
  * @param online - 已有在线歌词结果
+ * @param discover - 仅探测可用版本，忽略来源及格式排序
  * @returns 可用的 TTML 歌词，无覆盖版本时为 null
  */
 export const resolveTTMLOverlay = async (
   track: Track,
   online: OnlineResult,
+  discover = false,
 ): Promise<ResolvedLyric | null> => {
   if (track.source === "plugin") return null;
-  if (!shouldTryTTMLByFormat(online.source.format)) return null;
+  if (discover) {
+    if (!useSettingsStore().system.lyric.enableOnlineTTMLLyric) return null;
+  } else if (!shouldTryTTMLByFormat(online.source.format)) return null;
   const candidates = await Promise.all(
     TTML_PLATFORMS.map(async (platform) => ({
       platform,
@@ -248,7 +258,7 @@ export const resolveStreamingByPreference = async (
   track: Track,
   shouldContinue: () => boolean = () => true,
 ): Promise<ResolvedLyric | null> => {
-  const preference = useSettingsStore().lyric.lyricSourcePreference;
+  const preference = useLyricPreferenceStore().getPreference(track);
   let serverLyric: ResolvedLyric | null = null;
 
   if (preference === "self" || preference === "auto") {

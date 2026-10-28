@@ -749,6 +749,12 @@
       "modeTooltip": "FM Mode & Scene",
       "modeSettingsTip": "Select preferred recommendation mode and scene"
     },
+    "lyricCache": {
+      "clear": "Clear this song's lyric cache and reload",
+      "cleared": "Lyric cache cleared for this song",
+      "restartRequired": "Lyric cache clearing has been updated. Quit and restart the player to use it.",
+      "failed": "Failed to clear lyric cache"
+    },
     "lyricOffset": {
       "title": "Lyric Offset",
       "hint": "Positive values advance lyrics, in milliseconds"
@@ -1314,6 +1320,11 @@
       "qqmusic": "Prefer QM",
       "kugou": "Prefer KG",
       "netease": "Prefer NCM",
+      "ttml": "Prefer TTML",
+      "pin": "Pin {source} for this song",
+      "unpin": "Unpin {source} and follow global preference",
+      "pinned": "Lyric source pinned for this song",
+      "saveFailed": "Failed to save the pinned lyric source",
       "self": "Follow Self"
     },
     "lyricSourceOrder": {
@@ -1363,13 +1374,18 @@
     },
     "amllDbServer": {
       "label": "AMLL TTML DB Server",
-      "description": "Make sure the URL is correct, otherwise lyric fetch will fail",
+      "description": "Manage multiple lyric sources in priority order",
       "placeholder": "Enter AMLL TTML DB URL",
       "warning": "If you do not know what this does, please leave it as default",
-      "hint": "URL must be valid and contain the required placeholders",
+      "hint": "Drag the left handles to set priority. Sources are tried from top to bottom until lyrics are found.",
+      "add": "Add source",
+      "drag": "Drag to reorder",
+      "source": "Lyric source {index}",
+      "remove": "Remove lyric source {index}",
+      "duplicate": "Source URLs must be unique",
       "placeholders": "%p is the platform path, %s is the song ID",
       "docsHint": "More info at",
-      "invalid": "Invalid URL — required placeholders missing"
+      "invalid": "Add at least one valid HTTP or HTTPS URL. Each URL must contain %p and %s."
     },
     "enableExcludeLyrics": {
       "label": "Enable Lyric Exclusion",

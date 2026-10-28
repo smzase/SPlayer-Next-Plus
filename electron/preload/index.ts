@@ -558,6 +558,8 @@ const api = {
       subscribe<CloudUploadProgress>("cloud:upload-progress", callback),
   },
   lyrics: {
+    /** 清理指定歌曲的歌词缓存 */
+    clearTrackCache: (track: unknown) => ipcRenderer.invoke("lyrics:clearTrackCache", track),
     // 按 id 直取某平台歌词
     matchById: (platform: string, id: string) =>
       ipcRenderer.invoke("lyrics:matchById", platform, id),

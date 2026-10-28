@@ -1,4 +1,8 @@
 import type { SystemConfig } from "@shared/types/settings";
+import { normalizeTtmlServers } from "@shared/utils/ttmlServer";
+
+/** 配置版本键名 */
+const META_KEY = "__configVersion";
 
 export interface Migration {
   /** 版本号，递增整数 */
@@ -12,11 +16,27 @@ export interface Migration {
  * 新增字段已由 deepMerge 自动补全，此处仅用于字段重命名、数据转换等
  */
 export const migrations: Migration[] = [
-  // 示例：
-  // {
-  //   version: 1,
-  //   migrate: (data) => {
-  //     // 重命名字段、转换数据格式等
-  //   },
-  // },
+  {
+    version: 1,
+    migrate: (data) => {
+      data.lyric.amllDbServer = normalizeTtmlServers(data.lyric.amllDbServer);
+    },
+  },
 ];
+
+/**
+ * 对已合并默认值的配置执行迁移，兼容启动、重置和旧备份导入
+ * @param data - 配置对象
+ * @returns 迁移后的配置对象
+ */
+export const migrateConfig = (data: SystemConfig): SystemConfig => {
+  const metadata = data as unknown as Record<string, unknown>;
+  let version = Number(metadata[META_KEY] ?? 0);
+  for (const migration of migrations) {
+    if (migration.version <= version) continue;
+    migration.migrate(data);
+    version = migration.version;
+  }
+  metadata[META_KEY] = version;
+  return data;
+};

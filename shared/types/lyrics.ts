@@ -50,6 +50,8 @@ export type LyricTTMLResponse = { ok: true; data: string | null } | { ok: false;
 
 /** 渲染端歌词匹配入口 */
 export interface LyricsApi {
+  /** 清理指定歌曲的在线歌词、TTML 和匹配缓存 */
+  clearTrackCache: (track: Track) => Promise<void>;
   /** 按 id 直取某平台歌词 */
   matchById: (platform: Platform, id: string) => Promise<LyricMatchResponse>;
   /** 按 Track 元数据在某平台模糊搜索歌词 */

@@ -3,6 +3,8 @@ import type { LyricFormat, LyricInput, LyricLine } from "lyric-kit";
 import type { LyricData } from "@shared/types/lyrics";
 
 import { useSettingsStore } from "@/stores/settings";
+import { lyricPreferenceKey, useLyricPreferenceStore } from "@/stores/lyricPreference";
+import type { ResolvedLyric } from "@/services/lyric/resolve";
 import { watchLyricPreference } from "@/services/lyric/loader";
 import {
   applyLyricLanguages,
@@ -31,6 +33,34 @@ export const useMediaStore = defineStore("media", () => {
 
   /** 当前歌词原始内容 */
   const lyricContent = ref<LyricInput | null>(null);
+
+  /** 当前歌曲已发现的 TTML，切歌时释放 */
+  const ttmlCandidate = shallowRef<ResolvedLyric | null>(null);
+
+  /**
+   * 验证并保留当前歌曲的 TTML 候选，避免菜单展示空歌词
+   * @param candidate - TTML 候选
+   * @returns 候选是否包含有效歌词行
+   */
+  const rememberTTML = (candidate: ResolvedLyric): boolean => {
+    try {
+      if (parseLyric({ ...candidate.input, format: "ttml" }).lines.length === 0) return false;
+      ttmlCandidate.value = candidate;
+      return true;
+    } catch (error) {
+      console.warn("[media] TTML candidate invalid:", error);
+      return false;
+    }
+  };
+
+  watch(
+    () => (track.value ? lyricPreferenceKey(track.value) : null),
+    () => {
+      ttmlCandidate.value = null;
+      useLyricPreferenceStore().clearTemporary();
+    },
+    { flush: "sync" },
+  );
 
   /** 歌词是否正在加载 */
   const lyricLoading = ref(false);
@@ -190,6 +220,9 @@ export const useMediaStore = defineStore("media", () => {
     const hasContent = nextLines.length > 0;
     activeLyric.value = hasContent ? source : null;
     lyricContent.value = hasContent ? input : null;
+    if (hasContent && source?.format === "ttml" && input) {
+      ttmlCandidate.value = { source, input };
+    }
     parsedLyric.value = nextLines;
     lyricAuthors.value = hasContent && source && input ? authors : [];
     lyricIndex.value = -1;
@@ -219,6 +252,8 @@ export const useMediaStore = defineStore("media", () => {
   /** 清空所有状态 */
   const clear = (): void => {
     track.value = null;
+    ttmlCandidate.value = null;
+    useLyricPreferenceStore().clearTemporary();
     playbackContext.value = undefined;
     detail.value = null;
     activeLyric.value = null;
@@ -236,6 +271,8 @@ export const useMediaStore = defineStore("media", () => {
     detail,
     activeLyric,
     lyricContent,
+    ttmlCandidate,
+    rememberTTML,
     lyricFormat,
     parsedLyric,
     lyricAuthors,

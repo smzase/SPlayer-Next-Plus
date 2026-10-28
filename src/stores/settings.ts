@@ -19,6 +19,7 @@ import type { SystemConfig, LocaleCode } from "@shared/types/settings";
 import { ALL_PLATFORMS } from "@shared/types/platform";
 import { defaultSystemConfig } from "@shared/defaults/settings";
 import { setByPath } from "@shared/utils/path";
+import { normalizeTtmlServers } from "@shared/utils/ttmlServer";
 import { DEFAULT_SKIP_TRACK_KEYWORDS } from "@/utils/preset/skipKeywords";
 
 /**
@@ -272,12 +273,14 @@ export const useSettingsStore = defineStore(
       }
     };
 
-    /** 从主进程拉取后端配置 */
+    /** 从主进程拉取后端配置，并兼容热更新期间旧进程返回的单地址 */
     const syncSystem = async (): Promise<void> => {
       try {
+        const config = await window.api.config.getAll();
+        config.lyric.amllDbServer = normalizeTtmlServers(config.lyric.amllDbServer);
         deepAssign(
           system as unknown as Record<string, unknown>,
-          (await window.api.config.getAll()) as unknown as Record<string, unknown>,
+          config as unknown as Record<string, unknown>,
         );
       } catch {}
     };
@@ -333,12 +336,15 @@ export const useSettingsStore = defineStore(
 
     /**
      * 写入后端配置并同步本地
-     * 先就地 mutate 叶子保证 UI 即时反馈，IPC 落盘异步执行
+     * TTML 源先同步主进程，避免刷新歌词时仍读取旧顺序
+     * @param keyPath - 后端配置路径
+     * @param value - 新配置值
      */
     const setSystem = async (keyPath: string, value: unknown): Promise<void> => {
-      setByPath(system, keyPath, value);
+      if (keyPath !== "lyric.amllDbServer") setByPath(system, keyPath, value);
       try {
         await window.api.config.set(keyPath, value);
+        if (keyPath === "lyric.amllDbServer") setByPath(system, keyPath, value);
       } catch (err) {
         console.error("[settings] config.set failed", keyPath, err);
       }

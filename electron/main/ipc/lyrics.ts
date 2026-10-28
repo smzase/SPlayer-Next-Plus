@@ -12,10 +12,13 @@ import { ipcMain, dialog } from "electron";
 import * as netease from "@main/apis/common/lyric/netease";
 import * as qqmusic from "@main/apis/common/lyric/qqmusic";
 import * as kugou from "@main/apis/common/lyric/kugou";
-import { fetchTTML } from "@main/apis/common/lyric/ttml";
+import { fetchTTML, waitForTrackTTML } from "@main/apis/common/lyric/ttml";
+import { clearTrackLyricCache, getTrackLyricCacheTargets } from "@main/database/trackLyricCache";
 import { matchLocalTTML } from "@main/services/localLyricRepo";
 import { buildFingerprint, getMatchedId } from "@main/database/lyricMatchCache";
 import { coreLog } from "@main/utils/logger";
+import { store } from "@main/store";
+import { ALL_PLATFORMS } from "@shared/types/platform";
 import type { LyricMatchResponse, LyricTTMLResponse } from "@shared/types/lyrics";
 import type { Platform } from "@shared/types/platform";
 import type { Track } from "@shared/types/player";
@@ -111,7 +114,19 @@ const resolveTTMLOverlay = async (
   }
 };
 
+/** 注册歌词匹配、TTML 获取和本地歌词库相关 IPC */
 export const registerLyricsIpc = (): void => {
+  ipcMain.handle("lyrics:clearTrackCache", async (_evt, track: Track): Promise<void> => {
+    const keys = new Set(ALL_PLATFORMS.map((platform) => `byQuery:${platform}:${track.id}`));
+    for (const { platform, id } of getTrackLyricCacheTargets(track)) {
+      keys.add(`byId:${platform}:${id}`);
+    }
+    await Promise.allSettled(
+      [...inflight].filter(([key]) => keys.has(key)).map(([, task]) => task),
+    );
+    await waitForTrackTTML(getTrackLyricCacheTargets(track));
+    clearTrackLyricCache(track);
+  });
   ipcMain.handle("lyrics:matchById", (_evt, platform: Platform, id: string) =>
     dedup(`byId:${platform}:${id}`, () => resolveById(platform, id)),
   );
@@ -119,7 +134,9 @@ export const registerLyricsIpc = (): void => {
     dedup(`byQuery:${platform}:${track.id}`, () => resolveByQuery(platform, track)),
   );
   ipcMain.handle("lyrics:fetchTTMLOverlay", (_evt, track: Track, platform: "netease" | "qqmusic") =>
-    dedup(`ttml:${platform}:${track.id}`, () => resolveTTMLOverlay(track, platform)),
+    dedup(`ttml:${platform}:${track.id}:${JSON.stringify(store.get("lyric.amllDbServer"))}`, () =>
+      resolveTTMLOverlay(track, platform),
+    ),
   );
   ipcMain.handle(
     "lyrics:matchLocalTTML",

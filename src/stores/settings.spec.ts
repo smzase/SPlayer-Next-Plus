@@ -27,6 +27,43 @@ afterEach(() => {
 });
 
 describe("fork 侧边栏入口迁移", () => {
+  it("热更新时将旧主进程的单地址转换为来源列表", async () => {
+    const legacy = "https://custom.example/%p/%s.ttml";
+    Object.assign(window.api, {
+      config: { getAll: vi.fn(async () => ({ lyric: { amllDbServer: legacy } })) },
+    });
+    setActivePinia(createPinia());
+    const settings = useSettingsStore();
+    await settings.syncSystem();
+    expect(settings.system.lyric.amllDbServer).toEqual([
+      legacy,
+      "https://amll.mirror.dimeta.top/api/db/%p/%s.ttml",
+    ]);
+    settings.$dispose();
+  });
+
+  it("TTML 源在后端确认写入后才触发本地更新", async () => {
+    let finish!: () => void;
+    const set = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    Object.assign(window.api, { config: { set } });
+    setActivePinia(createPinia());
+    const settings = useSettingsStore();
+    const previous = [...settings.system.lyric.amllDbServer];
+    const next = ["https://changed.example/%p/%s.ttml"];
+    const pending = settings.setSystem("lyric.amllDbServer", next);
+    expect(settings.system.lyric.amllDbServer).toEqual(previous);
+    finish();
+    await pending;
+    expect(settings.system.lyric.amllDbServer).toEqual(next);
+    expect(set).toHaveBeenCalledWith("lyric.amllDbServer", next);
+    settings.$dispose();
+  });
+
   it("默认导航包含关注和我的播客，并保持原有入口顺序", () => {
     const keys = DEFAULT_SIDEBAR_NAV_GROUPS.flatMap((group) => group.keys);
     expect(keys[keys.indexOf("/") + 1]).toBe("/follow");

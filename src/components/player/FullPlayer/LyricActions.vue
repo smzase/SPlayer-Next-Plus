@@ -3,6 +3,8 @@ import { useMediaStore } from "@/stores/media";
 import { useStatusStore } from "@/stores/status";
 import { useSettingsDialog } from "@/settings/useSettingsDialog";
 import { formatSignedSec } from "@/utils/time";
+import { clearCurrentLyricCache } from "@/services/lyric/loader";
+import { toast } from "@/composables/useToast";
 
 defineProps<{
   /** 是否处于沉浸模式 */
@@ -47,6 +49,34 @@ const offsetInputMs = computed<number | null>({
 const advanceLyric = (): void => writeOffset(songOffset.value + LYRIC_OFFSET_STEP);
 const delayLyric = (): void => writeOffset(songOffset.value - LYRIC_OFFSET_STEP);
 const resetLyricOffset = (): void => writeOffset(0);
+
+const clearingCache = ref(false);
+
+/** 清理当前歌曲歌词缓存，并反馈清理结果 */
+const clearLyricCache = async (): Promise<void> => {
+  if (clearingCache.value || !media.track) return;
+  if (typeof window.api.lyrics.clearTrackCache !== "function") {
+    toast.warning(t("player.lyricCache.restartRequired"));
+    return;
+  }
+  clearingCache.value = true;
+  try {
+    await clearCurrentLyricCache();
+    toast.success(t("player.lyricCache.cleared"));
+  } catch (error) {
+    console.error("[lyricCache] 清理失败:", error);
+    if (
+      error instanceof Error &&
+      error.message.includes("No handler registered for 'lyrics:clearTrackCache'")
+    ) {
+      toast.warning(t("player.lyricCache.restartRequired"));
+    } else {
+      toast.error(t("player.lyricCache.failed"));
+    }
+  } finally {
+    clearingCache.value = false;
+  }
+};
 </script>
 
 <template>
@@ -130,6 +160,19 @@ const resetLyricOffset = (): void => writeOffset(0);
     <div class="h-px w-6 bg-cover/25 my-1" />
     <SButton type="cover" variant="ghost" circle :size="40" @click="settingsDialog.show('lyric')">
       <template #icon><IconLucideSettings2 /></template>
+    </SButton>
+    <SButton
+      type="cover"
+      variant="ghost"
+      circle
+      :size="40"
+      :disabled="!hasTrack"
+      :loading="clearingCache"
+      :title="t('player.lyricCache.clear')"
+      :aria-label="t('player.lyricCache.clear')"
+      @click="clearLyricCache"
+    >
+      <template #icon><IconLucideTrash2 /></template>
     </SButton>
     <CopyLyricsDialog v-model:open="copyDialogOpen" />
   </div>

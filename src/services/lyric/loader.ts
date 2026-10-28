@@ -9,6 +9,7 @@ import type { LyricData } from "@shared/types/lyrics";
 import { isPlatform } from "@shared/types/platform";
 import { useMediaStore } from "@/stores/media";
 import { useSettingsStore } from "@/stores/settings";
+import { lyricPreferenceKey, useLyricPreferenceStore } from "@/stores/lyricPreference";
 import { DEFAULT_LYRIC_FORMAT_ORDER } from "@/types/settings";
 import {
   embeddedLyricFromDetail,
@@ -17,16 +18,44 @@ import {
   resolveLocalRepoLyric,
   resolveOnlineByPreference,
   resolvePluginLyric,
+  resolvePlatformLyric,
+  resolveStreamingLyric,
   resolveStreamingByPreference,
   resolveTTMLOverlay,
   type LocalLyric,
   type OnlineResult,
   type ResolvedLyric,
 } from "@/services/lyric/resolve";
-import { consumePreloadedLyric } from "@/services/lyric/preload";
+import { consumePreloadedLyric, invalidatePreloadedLyric } from "@/services/lyric/preload";
 
 /** 竞态 token */
 let currentToken = 0;
+
+/** 清理期间暂缓同曲加载，切歌不受影响 */
+let clearingTrackKey: string | null = null;
+
+/**
+ * 清理当前歌曲的歌词缓存并重新加载，切歌后不回写原歌曲
+ * @returns 清理完成后结束
+ */
+export const clearCurrentLyricCache = async (): Promise<void> => {
+  const media = useMediaStore();
+  const track = media.track;
+  if (!track || clearingTrackKey !== null) return;
+  const key = lyricPreferenceKey(track);
+  clearingTrackKey = key;
+  currentToken++;
+  media.ttmlCandidate = null;
+  invalidatePreloadedLyric();
+  try {
+    await window.api.lyrics.clearTrackCache(toRaw(track));
+  } finally {
+    clearingTrackKey = null;
+    if (media.track && lyricPreferenceKey(media.track) === key) {
+      await loadForTrack(media.detail);
+    }
+  }
+};
 
 /**
  * 从外部歌词列表中选出最优格式的索引
@@ -158,10 +187,13 @@ let ttmlTriggeredToken = -1;
 const tryApplyTTMLOverlay = (token: number, track: Track, online: OnlineResult): void => {
   if (token !== currentToken || ttmlTriggeredToken === token) return;
   ttmlTriggeredToken = token;
-  resolveTTMLOverlay(track, online)
+  resolveTTMLOverlay(track, online, true)
     .then((ttml) => {
       if (token !== currentToken || !ttml) return;
-      commitIfBetter(token, ttml.source, ttml.input);
+      if (!useMediaStore().rememberTTML(ttml)) return;
+      if (useLyricPreferenceStore().getPreference(track) === "auto") {
+        commitIfBetter(token, ttml.source, ttml.input);
+      }
     })
     .catch((err) => {
       console.warn("[lyricLoader] tryApplyTTMLOverlay failed:", err);
@@ -198,7 +230,7 @@ const applyOnline = (
     return;
   }
   // 尝试提交在线歌词
-  const preference = useSettingsStore().lyric.lyricSourcePreference;
+  const preference = useLyricPreferenceStore().getPreference(track);
   // 仅自动模式是智能选择，其余（含跟随自身）均为用户显式指令，来源权威高于格式优劣
   const isExplicit = preference !== "auto";
   // 自动模式下，若当前已展示更优歌词（如候选抢占或插件优选），不降级覆盖
@@ -223,6 +255,7 @@ const applyOnline = (
  * @returns 是否命中
  */
 const tryLocalRepo = async (token: number, track: Track): Promise<boolean> => {
+  if (useLyricPreferenceStore().getPreference(track) !== "auto") return false;
   const resolved = await resolveLocalRepoLyric(track);
   if (token !== currentToken) return false;
   return resolved ? commitResolvedAndHasParsed(token, resolved) : false;
@@ -331,15 +364,87 @@ export const beginLoad = (): number => {
 };
 
 /**
+ * 查找当前歌曲的 TTML 候选，不改变正在展示的歌词
+ * @param detail - 当前歌曲详情，加载期间可传 null 排除上一首的详情
+ * @returns 可用的 TTML 歌词，未命中或已切歌时为 null
+ */
+export const discoverCurrentTTML = async (
+  detail: TrackDetail | null = useMediaStore().lyricLoading ? null : useMediaStore().detail,
+): Promise<ResolvedLyric | null> => {
+  const media = useMediaStore();
+  const track = media.track;
+  if (!track) return null;
+  if (clearingTrackKey === lyricPreferenceKey(track)) return null;
+  if (media.ttmlCandidate) return media.ttmlCandidate;
+  const token = currentToken;
+  let resolved: ResolvedLyric | null = null;
+  const external =
+    track.source === "local"
+      ? detail?.externalLyrics.find((lyric) => lyric.format === "ttml")
+      : undefined;
+  if (external) {
+    const result = await window.api.player.readLyricFile(external.path);
+    if (result.success && result.data) {
+      resolved = {
+        source: { source: "external", format: "ttml" },
+        input: { content: result.data },
+      };
+    }
+  }
+  const embedded = track.source === "local" ? embeddedLyricFromDetail(detail) : null;
+  if (!resolved && embedded?.source.format === "ttml") {
+    resolved = { source: embedded.source, input: { content: embedded.content } };
+  }
+  resolved ??= await resolveLocalRepoLyric(track);
+  if (token !== currentToken) return null;
+  resolved ??= await resolveTTMLOverlay(
+    track,
+    { source: { source: "online", format: "lrc", platform: "netease" }, input: { content: "" } },
+    true,
+  );
+  if (token !== currentToken) return null;
+  return resolved && media.rememberTTML(resolved) ? resolved : null;
+};
+
+/**
+ * 应用歌曲级来源，避免预载、插件或 TTML 覆盖固定选择
+ * @param token - 当前加载周期
+ * @param track - 歌曲信息
+ * @param detail - 歌曲详情
+ * @returns 是否已处理歌曲级选择
+ */
+const applySongPreference = async (
+  token: number,
+  track: Track,
+  detail: TrackDetail | null,
+): Promise<boolean> => {
+  const preferences = useLyricPreferenceStore();
+  const preference = preferences.getPreference(track);
+  if (preference !== "ttml" && preferences.getPinned(track) === null) return false;
+  if (preference === "auto") return false;
+  let resolved: ResolvedLyric | null = null;
+  if (preference === "ttml") {
+    resolved = await discoverCurrentTTML(detail);
+  } else if (isPlatform(preference)) {
+    resolved = await resolvePlatformLyric(preference, track);
+  } else if (isPlatform(track.source)) {
+    resolved = await resolvePlatformLyric(track.source, track);
+  } else if (track.source === "streaming") {
+    resolved = await resolveStreamingLyric(track);
+  } else if (track.source === "plugin") {
+    resolved = await resolvePluginLyric(track);
+  } else {
+    const local = detail ? await readLocal(detail) : null;
+    if (local) resolved = { source: local.source, input: { content: local.content } };
+  }
+  if (token !== currentToken) return true;
+  commit(token, resolved?.source ?? null, resolved?.input ?? null);
+  return true;
+};
+
+/**
  * 为当前 track 加载歌词
- *
- * 1. 无 track：commit null 收尾
- * 2. 在线歌曲：
- *    - 默认顺序下，track.platform 与候选平台一致时走 matchById
- *    - 不一致则走 matchByQuery
- * 3. 本地歌曲：本地有先立即 commit 显示；再按偏好查在线，命中热替换
- * 4. 本地 + 在线都无：commit null 收尾 loading
- *
+ * 歌曲级选择先于预载和全局偏好生效
  * @param detail - 歌曲详细信息
  */
 export const loadForTrack = async (detail: TrackDetail | null): Promise<void> => {
@@ -352,7 +457,13 @@ export const loadForTrack = async (detail: TrackDetail | null): Promise<void> =>
       commit(token, null, null);
       return;
     }
-    const preloaded = await consumePreloadedLyric(track);
+    if (clearingTrackKey === lyricPreferenceKey(track)) return;
+    if (await applySongPreference(token, track, detail)) return;
+    if (token !== currentToken) return;
+    const preloaded =
+      useLyricPreferenceStore().getPinned(track) === null
+        ? await consumePreloadedLyric(track)
+        : { hit: false as const };
     if (token !== currentToken) return;
     if (preloaded.hit) {
       if (commitIfBetter(token, preloaded.lyric.source, preloaded.lyric.input)) {
@@ -431,6 +542,9 @@ const refreshPreference = async (): Promise<void> => {
   const media = useMediaStore();
   const track = media.track;
   if (!track) return;
+  if (clearingTrackKey === lyricPreferenceKey(track)) return;
+  if (await applySongPreference(token, track, media.detail)) return;
+  if (token !== currentToken) return;
   // 本地 TTML 歌词库最高优先
   if (await tryLocalRepo(token, track)) return;
   if (token !== currentToken) return;
@@ -484,6 +598,7 @@ const refreshPreference = async (): Promise<void> => {
 /** 监听歌词偏好变化 */
 export const watchLyricPreference = (): void => {
   const settings = useSettingsStore();
+  const preferences = useLyricPreferenceStore();
   watch(
     () => [
       settings.lyric.lyricSourcePreference,
@@ -493,9 +608,24 @@ export const watchLyricPreference = (): void => {
       settings.system.lyric.enableOnlineTTMLLyric,
       settings.system.localLyric.enableLocalTTMLOverride,
       settings.system.localLyric.repoDir,
+      preferences.revision,
+      JSON.stringify(settings.system.lyric.amllDbServer),
     ],
-    () => {
-      refreshPreference();
+    (values, previous) => {
+      const media = useMediaStore();
+      const track = media.track;
+      if (values.at(-1) !== previous.at(-1)) {
+        media.ttmlCandidate = null;
+        void loadForTrack(media.detail);
+        return;
+      }
+      if (
+        track &&
+        preferences.getPinned(track) !== null &&
+        values.slice(1).every((value, index) => value === previous[index + 1])
+      )
+        return;
+      refreshPreference().catch((error) => console.error("[lyricLoader] refresh failed:", error));
     },
   );
 };

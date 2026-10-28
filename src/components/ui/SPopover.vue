@@ -122,6 +122,7 @@ const bridgeClasses = computed(() =>
 
 <template>
   <PopoverRoot :open="isOpen" @update:open="trigger === 'click' ? setOpen($event) : undefined">
+    <slot name="anchor" />
     <PopoverTrigger as-child>
       <span
         :class="block ? 'flex w-full' : 'inline-flex'"

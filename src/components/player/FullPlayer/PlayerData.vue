@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { Artist } from "@shared/types/player";
-import type { SSelectOption } from "@/components/ui/SSelect.vue";
 import { useMediaStore } from "@/stores/media";
 import { useStatusStore } from "@/stores/status";
 import { useSettingsStore } from "@/stores/settings";
@@ -41,15 +40,6 @@ const isPodcastVoice = computed(
     displayTrack.value?.source === "netease" &&
     (!!displayTrack.value.extId || displayTrack.value.playbackSource?.type === "radio"),
 );
-
-/** 歌词来源偏好下拉选项 */
-const lyricSourceOptions = computed<SSelectOption[]>(() => [
-  { value: "auto", label: t("settings.lyricSourcePreference.auto") },
-  { value: "qqmusic", label: t("settings.lyricSourcePreference.qqmusic") },
-  { value: "kugou", label: t("settings.lyricSourcePreference.kugou") },
-  { value: "netease", label: t("settings.lyricSourcePreference.netease") },
-  { value: "self", label: t("settings.lyricSourcePreference.self") },
-]);
 
 /**
  * 生成歌手详情页跳转目标
@@ -125,9 +115,6 @@ const showLosslessIcon = computed(() => {
   return level === "hi-res" || level === "lossless";
 });
 
-/** 歌词格式标签 */
-const lyricLabel = computed(() => media.activeLyric?.format.toUpperCase() ?? "NO-LRC");
-
 /** 专辑文本 */
 const albumText = computed(() => displayTrack.value?.album?.name ?? "");
 
@@ -193,21 +180,7 @@ const alignItems = computed(() => {
         <IconSpLossless v-if="showLosslessIcon" class="text-[1.4em] -my-[0.4em]" />
         {{ qualityLabel }}
       </span>
-      <SPopselect
-        v-model="settings.lyric.lyricSourcePreference"
-        :options="lyricSourceOptions"
-        side="top"
-        :side-offset="8"
-        cover
-      >
-        <template #trigger>
-          <span
-            class="inline-flex items-center justify-center leading-none px-1.5 py-1.2 rounded-md border border-solid border-cover/30 cursor-pointer transition-colors hover:border-cover/60"
-          >
-            {{ lyricLabel }}
-          </span>
-        </template>
-      </SPopselect>
+      <LyricSourceSelect />
     </div>
     <!-- 歌手 -->
     <div class="max-w-full flex items-center gap-1.5 text-[1.2em] text-cover/60">

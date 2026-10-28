@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Track, TrackSource } from "@shared/types/player";
 import { useMediaStore } from "@/stores/media";
 import { useSettingsStore } from "@/stores/settings";
+import { useLyricPreferenceStore } from "@/stores/lyricPreference";
 
 // Mock preload
 const preloadedResult = vi.hoisted(() => ({
@@ -11,6 +12,7 @@ const preloadedResult = vi.hoisted(() => ({
 }));
 
 vi.mock("@/services/lyric/preload", () => ({
+  invalidatePreloadedLyric: vi.fn(),
   consumePreloadedLyric: vi.fn(async () => ({
     hit: preloadedResult.hit,
     lyric: preloadedResult.lyric,
@@ -23,6 +25,7 @@ const mockResolveTTMLOverlay = vi.fn();
 const mockResolveLocalRepoLyric = vi.fn();
 const mockResolvePluginLyric = vi.fn();
 const mockResolveStreamingByPreference = vi.fn();
+const mockResolvePlatformLyric = vi.fn();
 
 vi.mock("@/services/lyric/resolve", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/services/lyric/resolve")>();
@@ -33,10 +36,11 @@ vi.mock("@/services/lyric/resolve", async (importOriginal) => {
     resolveLocalRepoLyric: (...args: unknown[]) => mockResolveLocalRepoLyric(...args),
     resolvePluginLyric: (...args: unknown[]) => mockResolvePluginLyric(...args),
     resolveStreamingByPreference: (...args: unknown[]) => mockResolveStreamingByPreference(...args),
+    resolvePlatformLyric: (...args: unknown[]) => mockResolvePlatformLyric(...args),
   };
 });
 
-import { loadForTrack } from "./loader";
+import { clearCurrentLyricCache, discoverCurrentTTML, loadForTrack } from "./loader";
 
 const createTrack = (id: string, source: TrackSource = "netease"): Track => ({
   id,
@@ -47,6 +51,7 @@ const createTrack = (id: string, source: TrackSource = "netease"): Track => ({
 });
 
 const mockWindowApi = {
+  lyrics: { clearTrackCache: vi.fn().mockResolvedValue(undefined) },
   player: {
     readLyricFile: vi.fn().mockResolvedValue({ success: false, data: null }),
   },
@@ -82,6 +87,7 @@ window.api = mockWindowApi;
 
 describe("lyric loader", () => {
   beforeEach(() => {
+    localStorage.clear();
     setActivePinia(createPinia());
     vi.clearAllMocks();
     preloadedResult.hit = false;
@@ -92,9 +98,207 @@ describe("lyric loader", () => {
     mockResolveLocalRepoLyric.mockResolvedValue(null);
     mockResolvePluginLyric.mockResolvedValue(null);
     mockResolveStreamingByPreference.mockResolvedValue(null);
+    mockResolvePlatformLyric.mockResolvedValue(null);
+    mockWindowApi.lyrics.clearTrackCache.mockReset().mockResolvedValue(undefined);
 
     // @ts-expect-error test mock
     window.api = mockWindowApi;
+  });
+
+  it("清理当前歌词缓存后重载并保留固定来源", async () => {
+    const media = useMediaStore();
+    const track = createTrack("clear_cache");
+    useLyricPreferenceStore().setPinned(track, "qqmusic");
+    media.track = track;
+    mockResolvePlatformLyric.mockResolvedValue({
+      source: { source: "online", format: "lrc", platform: "qqmusic" },
+      input: { content: "[00:01.00]新歌词" },
+    });
+    await clearCurrentLyricCache();
+    expect(mockWindowApi.lyrics.clearTrackCache).toHaveBeenCalledWith(track);
+    expect(media.lyricContent?.content).toContain("新歌词");
+    expect(useLyricPreferenceStore().getPinned(track)).toBe("qqmusic");
+  });
+
+  it("清理等待期间切歌，不重新加载旧歌也不清空新歌歌词", async () => {
+    const media = useMediaStore();
+    const oldTrack = createTrack("clear_old");
+    media.track = oldTrack;
+    let finish!: () => void;
+    mockWindowApi.lyrics.clearTrackCache.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const clearing = clearCurrentLyricCache();
+    media.setTrack(createTrack("new_track"));
+    mockResolveOnlineByPreference.mockResolvedValue({
+      source: { source: "online", format: "lrc", platform: "netease" },
+      input: { content: "[00:01.00]下一首歌词" },
+    });
+    await loadForTrack(null);
+    mockResolveOnlineByPreference.mockClear();
+    finish();
+    await clearing;
+    expect(mockWindowApi.lyrics.clearTrackCache).toHaveBeenCalledWith(oldTrack);
+    expect(media.lyricContent?.content).toContain("下一首歌词");
+    expect(mockResolveOnlineByPreference).not.toHaveBeenCalled();
+  });
+
+  it("清理失败会抛出错误并恢复当前歌词加载", async () => {
+    const media = useMediaStore();
+    media.track = createTrack("clear_error");
+    mockWindowApi.lyrics.clearTrackCache.mockRejectedValue(new Error("database unavailable"));
+    mockResolveOnlineByPreference.mockResolvedValue({
+      source: { source: "online", format: "lrc", platform: "netease" },
+      input: { content: "[00:01.00]恢复歌词" },
+    });
+    await expect(clearCurrentLyricCache()).rejects.toThrow("database unavailable");
+    expect(media.lyricContent?.content).toContain("恢复歌词");
+  });
+
+  it("固定平台优先于预载及本地 TTML，修改全局偏好不会重新加载", async () => {
+    const track = createTrack("pinned_platform");
+    const preferences = useLyricPreferenceStore();
+    preferences.setPinned(track, "qqmusic");
+    const media = useMediaStore();
+    media.track = track;
+    mockResolvePlatformLyric.mockResolvedValue({
+      source: { source: "online", format: "lrc", platform: "qqmusic" },
+      input: { content: "[00:01.00]固定歌词" },
+    });
+    preloadedResult.hit = true;
+    preloadedResult.lyric = {
+      source: { source: "online", format: "qrc", platform: "netease" },
+      input: { content: "[1000,1000]预载歌词(1000,1000)" },
+    };
+    await loadForTrack(null);
+    expect(media.activeLyric?.platform).toBe("qqmusic");
+    expect(mockResolveLocalRepoLyric).not.toHaveBeenCalled();
+    expect(mockResolveTTMLOverlay).not.toHaveBeenCalled();
+    useSettingsStore().lyric.lyricSourcePreference = "kugou";
+    await nextTick();
+    expect(mockResolvePlatformLyric).toHaveBeenCalledTimes(1);
+    expect(media.activeLyric?.platform).toBe("qqmusic");
+  });
+
+  it("取消固定后恢复全局偏好，切歌时不会继承上一首的固定", async () => {
+    const track = createTrack("unpin");
+    const preferences = useLyricPreferenceStore();
+    preferences.setPinned(track, "qqmusic");
+    const settings = useSettingsStore();
+    settings.lyric.lyricSourcePreference = "kugou";
+    const media = useMediaStore();
+    media.track = track;
+    mockResolvePlatformLyric.mockResolvedValue({
+      source: { source: "online", format: "lrc", platform: "qqmusic" },
+      input: { content: "[00:01.00]固定歌词" },
+    });
+    mockResolveOnlineByPreference.mockResolvedValue({
+      source: { source: "online", format: "lrc", platform: "kugou" },
+      input: { content: "[00:01.00]全局歌词" },
+    });
+    await loadForTrack(null);
+    preferences.setPinned(track, null);
+    await vi.waitFor(() => expect(media.activeLyric?.platform).toBe("kugou"));
+    media.setTrack(createTrack("other_song"));
+    await loadForTrack(null);
+    expect(preferences.getPinned(media.track!)).toBeNull();
+    expect(media.activeLyric?.platform).toBe("kugou");
+  });
+
+  it("固定后迟到的 TTML 不会覆盖目标平台", async () => {
+    const media = useMediaStore();
+    const track = createTrack("late_ttml");
+    media.track = track;
+    let finish!: (value: unknown) => void;
+    mockResolveTTMLOverlay.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    mockResolveOnlineByPreference.mockResolvedValue({
+      source: { source: "online", format: "lrc", platform: "netease" },
+      input: { content: "[00:01.00]原歌词" },
+    });
+    await loadForTrack(null);
+    mockResolvePlatformLyric.mockResolvedValue({
+      source: { source: "online", format: "lrc", platform: "qqmusic" },
+      input: { content: "[00:01.00]固定歌词" },
+    });
+    useLyricPreferenceStore().setPinned(track, "qqmusic");
+    await vi.waitFor(() => expect(media.activeLyric?.platform).toBe("qqmusic"));
+    finish({
+      source: { source: "online", format: "ttml", platform: "netease" },
+      input: {
+        content:
+          '<tt xmlns="http://www.w3.org/ns/ttml"><body><div><p begin="1s" end="3s">迟到歌词</p></div></body></tt>',
+      },
+    });
+    await nextTick();
+    expect(media.activeLyric?.platform).toBe("qqmusic");
+    expect(media.ttmlCandidate).toBeNull();
+  });
+
+  it("可发现并固定 TTML，切换歌曲释放候选，回到歌曲后恢复固定 TTML", async () => {
+    const media = useMediaStore();
+    const track = createTrack("ttml_pin");
+    media.track = track;
+    const settings = useSettingsStore();
+    settings.lyric.lyricSourcePreference = "netease";
+    await nextTick();
+    const ttml = {
+      source: { source: "online", format: "ttml", platform: "netease" },
+      input: {
+        content:
+          '<tt xmlns="http://www.w3.org/ns/ttml"><body><div><p begin="1s" end="3s">TTML歌词</p></div></body></tt>',
+      },
+    };
+    mockResolveTTMLOverlay.mockResolvedValue(ttml);
+    expect(await discoverCurrentTTML()).toEqual(ttml);
+    const preferences = useLyricPreferenceStore();
+    preferences.setPinned(track, "ttml");
+    await vi.waitFor(() => expect(media.activeLyric?.format).toBe("ttml"));
+    expect(settings.lyric.lyricSourcePreference).toBe("netease");
+    media.setTrack(createTrack("next_song"));
+    expect(media.ttmlCandidate).toBeNull();
+    media.setTrack(track);
+    await loadForTrack(null);
+    expect(media.activeLyric?.format).toBe("ttml");
+    expect(preferences.getPinned(track)).toBe("ttml");
+  });
+
+  it("无效 TTML 不会成为可选来源", async () => {
+    const media = useMediaStore();
+    media.track = createTrack("invalid_ttml");
+    mockResolveTTMLOverlay.mockResolvedValue({
+      source: { source: "online", format: "ttml", platform: "netease" },
+      input: { content: "无效歌词" },
+    });
+    expect(await discoverCurrentTTML()).toBeNull();
+    expect(media.ttmlCandidate).toBeNull();
+  });
+
+  it("TTML 源顺序变更后清除旧候选并重新加载固定歌词", async () => {
+    const media = useMediaStore();
+    const track = createTrack("ttml_sources_changed");
+    media.track = track;
+    const source = { source: "online", format: "ttml", platform: "netease" } as const;
+    const oldInput = {
+      content:
+        '<tt xmlns="http://www.w3.org/ns/ttml"><body><div><p begin="1s" end="3s">旧源</p></div></body></tt>',
+    };
+    const newInput = {
+      content:
+        '<tt xmlns="http://www.w3.org/ns/ttml"><body><div><p begin="1s" end="3s">新源</p></div></body></tt>',
+    };
+    media.setLyric(source, oldInput);
+    useLyricPreferenceStore().setPinned(track, "ttml");
+    await vi.waitFor(() => expect(media.lyricContent?.content).toBe(oldInput.content));
+    mockResolveTTMLOverlay.mockResolvedValue({ source, input: newInput });
+    useSettingsStore().system.lyric.amllDbServer = ["https://new.example/%p/%s.ttml"];
+    await vi.waitFor(() => expect(media.lyricContent?.content).toBe(newInput.content));
+    expect(mockResolveTTMLOverlay).toHaveBeenCalled();
   });
 
   it("在线多平台并发查询时，先到达的候选歌词立即上屏展示", async () => {
