@@ -1,20 +1,15 @@
-//! TaskbarService：通过命令队列驱动的任务栏歌词嵌入服务。
-//!
-//! 单后台线程接收 NAPI 命令，按 win10/win11 策略管理任务栏嵌入和 UIA 重扫，
-//! 自带去抖（聚合连续 Update）和 UIA 冷启动重试
+//! 在独立线程计算任务栏布局，Explorer 暂不可用时隐藏歌词并等待恢复
 
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    mpsc::{self, Receiver, RecvTimeoutError, Sender},
-};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
+use crate::JsTaskbarLayout;
+use crate::overlay::TaskbarSnapshot;
 use crate::strategy::{
-    LayoutParams, LegacyStrategy, TaskbarStrategy, Win11Strategy, set_window_mouse_passthrough,
+    AvailableSpace, LayoutParams, LegacyStrategy, TaskbarLayout, TaskbarStrategy, Win11Strategy,
 };
 use crate::utils::{ComApartmentGuard, get_windows_build_number};
-use crate::{JsTaskbarLayout, take_valid_hwnd};
 use napi::{
     Status,
     bindgen_prelude::Function,
@@ -25,26 +20,51 @@ use napi_derive::napi;
 type LayoutTsfn =
     ThreadsafeFunction<JsTaskbarLayout, UnknownReturnValue, JsTaskbarLayout, Status, false>;
 
+const TASKBAR_POLL_INTERVAL: Duration = Duration::from_millis(200);
+const RETRY_DELAYS_MS: &[u64] = &[50, 150, 300, 600, 1000];
+
 enum TaskbarCommand {
-    Embed {
-        hwnd_ptr: usize,
-    },
-    Update {
-        width: i32,
-    },
-    /// explorer 重启后重新初始化策略并用最近的 hwnd/width 恢复
+    Update { width: i32 },
     Reinit,
     Stop,
+}
+
+#[derive(Default)]
+struct PendingCommands {
+    width: Option<i32>,
+    update: bool,
+    reinit: bool,
+    stopped: bool,
+}
+
+impl PendingCommands {
+    /// 合并布局请求，同时保留重建和停止信号，重试期间也使用同一入口
+    /// @param command - JS 侧发来的服务命令
+    fn apply(&mut self, command: TaskbarCommand) {
+        match command {
+            TaskbarCommand::Update { width } => {
+                self.width = Some(width);
+                self.update = true;
+            }
+            TaskbarCommand::Reinit => {
+                self.reinit = true;
+                self.update = true;
+            }
+            TaskbarCommand::Stop => self.stopped = true,
+        }
+    }
 }
 
 #[napi]
 pub struct TaskbarService {
     sender: Sender<TaskbarCommand>,
-    hwnd_ptr: AtomicUsize,
 }
 
 #[napi]
 impl TaskbarService {
+    /// 启动任务栏布局线程
+    /// @param callback - 接收屏幕物理像素布局的回调，空区域表示应隐藏歌词
+    /// @returns - 任务栏布局服务
     #[napi(
         constructor,
         ts_args_type = "callback: (layout: JsTaskbarLayout) => void"
@@ -54,38 +74,13 @@ impl TaskbarService {
         let tsfn = callback
             .build_threadsafe_function::<JsTaskbarLayout>()
             .build_callback(|ctx| Ok(ctx.value))?;
-
         let (tx, rx) = mpsc::channel();
-
-        thread::spawn(move || {
-            worker_loop(&rx, &tsfn);
-        });
-
-        Ok(Self {
-            sender: tx,
-            hwnd_ptr: AtomicUsize::new(0),
-        })
+        thread::spawn(move || worker_loop(&rx, &tsfn));
+        Ok(Self { sender: tx })
     }
 
-    /// 嵌入窗口到任务栏。传入 Electron BrowserWindow 的 native handle (Buffer → usize)
-    #[napi]
-    pub fn embed_window_by_ptr(&self, hwnd_ptr: f64) {
-        self.hwnd_ptr.store(hwnd_ptr as usize, Ordering::Release);
-        let _ = self.sender.send(TaskbarCommand::Embed {
-            hwnd_ptr: hwnd_ptr as usize,
-        });
-    }
-
-    /// 切换嵌入窗口的原生鼠标穿透样式
-    #[napi]
-    pub fn set_mouse_passthrough(&self, ignore: bool) {
-        let hwnd_ptr = self.hwnd_ptr.load(Ordering::Acquire);
-        if let Some(hwnd) = take_valid_hwnd(hwnd_ptr) {
-            set_window_mouse_passthrough(hwnd, ignore);
-        }
-    }
-
-    /// 更新歌词显示宽度，触发重新计算布局
+    /// 请求重新计算歌词布局
+    /// @param lyric_width - Windows 10 需要预留的物理像素宽度
     #[napi]
     pub fn update(&self, lyric_width: i32) {
         let _ = self
@@ -93,169 +88,111 @@ impl TaskbarService {
             .send(TaskbarCommand::Update { width: lyric_width });
     }
 
-    /// 通知服务重建策略（explorer.exe 重启时由 JS 层调用）
+    /// 通知服务丢弃旧任务栏策略并重新扫描
     #[napi]
     pub fn reinit(&self) {
         let _ = self.sender.send(TaskbarCommand::Reinit);
     }
 
-    /// 停止服务并恢复任务栏原始状态
+    /// 请求停止布局计算线程
     #[napi]
-    pub fn stop(&self) {
+    pub fn stop(&mut self) {
         let _ = self.sender.send(TaskbarCommand::Stop);
     }
 }
 
+/// 统一处理命令、任务栏消失和布局重试，定时检测只查询 Win32 状态
+/// @param rx - 服务命令队列
+/// @param tsfn - 布局结果回调
 fn worker_loop(rx: &Receiver<TaskbarCommand>, tsfn: &LayoutTsfn) {
-    // 进入 MTA apartment，作用域结束自动配对 CoUninitialize；失败直接退出线程
     let Some(_com_guard) = ComApartmentGuard::try_init() else {
         return;
     };
+    let mut pending = PendingCommands::default();
+    let mut strategy: Option<Box<dyn TaskbarStrategy>> = None;
+    let mut snapshot: Option<TaskbarSnapshot> = None;
+    let mut visible_layout: Option<TaskbarLayout> = None;
+    let mut next_poll = Instant::now();
+    let mut retry_at: Option<Instant> = None;
+    let mut retry_index = 0;
 
-    let mut strategy = create_strategy();
-    // 记忆最近的 hwnd/width，explorer 重启后 Reinit 据此恢复
-    let mut last_hwnd: Option<usize> = None;
-    let mut last_width: i32 = 0;
-
-    while let Ok(msg) = rx.recv() {
-        match msg {
-            TaskbarCommand::Embed { hwnd_ptr } => {
-                if let Some(hwnd) = take_valid_hwnd(hwnd_ptr) {
-                    last_hwnd = Some(hwnd_ptr);
-                    if let Some(s) = strategy.as_ref() {
-                        s.embed_window(hwnd);
-                    }
-                }
-            }
-
-            TaskbarCommand::Update { width } => {
-                let mut final_width = width;
-                let mut stop_signal = false;
-                let mut reinit_requested = false;
-
-                while let Ok(next_msg) = rx.try_recv() {
-                    match next_msg {
-                        TaskbarCommand::Update { width: w } => final_width = w,
-                        TaskbarCommand::Embed { hwnd_ptr } => {
-                            if let Some(hwnd) = take_valid_hwnd(hwnd_ptr) {
-                                last_hwnd = Some(hwnd_ptr);
-                                if let Some(s) = strategy.as_ref() {
-                                    s.embed_window(hwnd);
-                                }
-                            }
-                        }
-                        TaskbarCommand::Reinit => {
-                            reinit_requested = true;
-                        }
-                        TaskbarCommand::Stop => {
-                            stop_signal = true;
-                            break;
-                        }
-                    }
-                }
-
-                if stop_signal {
-                    break;
-                }
-
-                last_width = final_width;
-
-                if reinit_requested {
-                    do_reinit(&mut strategy, last_hwnd);
-                }
-
-                if !run_update_with_retry(&mut strategy, final_width, tsfn, rx) {
-                    break;
-                }
-            }
-
-            TaskbarCommand::Reinit => {
-                do_reinit(&mut strategy, last_hwnd);
-                if last_width > 0 && !run_update_with_retry(&mut strategy, last_width, tsfn, rx) {
-                    break;
-                }
-            }
-
-            TaskbarCommand::Stop => {
-                break;
-            }
+    loop {
+        let deadline = retry_at.map_or(next_poll, |retry| retry.min(next_poll));
+        match rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+            Ok(command) => pending.apply(command),
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => break,
         }
-    }
-
-    if let Some(s) = strategy.as_ref() {
-        s.restore();
-    }
-}
-
-/// Drop 旧策略（自动 restore），新建策略并用最近的 hwnd 重新嵌入
-fn do_reinit(strategy: &mut Option<Box<dyn TaskbarStrategy>>, last_hwnd: Option<usize>) {
-    debug!("TaskbarCreated → 重建策略");
-    *strategy = None;
-    *strategy = create_strategy();
-    if let (Some(s), Some(hwnd)) = (strategy.as_ref(), last_hwnd.and_then(take_valid_hwnd)) {
-        s.embed_window(hwnd);
-    }
-}
-
-/// 对 `update_layout` 做有界退避重试，专门兜底 UIA 冷启动首次扫描返回 None 的情形。
-///
-/// 重试窗口累计约 1.1s：第一次立即尝试，之后分别等 50/150/300/600ms；
-/// 每次等待都用 `recv_timeout` 可被新命令打断（新 Update 改宽度、Embed 继续嵌入、Stop 退出）。
-///
-/// 注意：`update_layout` 返回 `Some(layout)`（含"两侧空间都 0"这种合法的"无空间"情况）会立即 emit 并返回——
-/// 这种是真·无位置展示，不该被当成失败；只有真·扫描失败（UIA 树冷启拿不到内容）才会走重试。
-///
-/// 返回 false 表示接收到 Stop，上层应退出 worker_loop
-fn run_update_with_retry(
-    strategy: &mut Option<Box<dyn TaskbarStrategy>>,
-    initial_width: i32,
-    tsfn: &LayoutTsfn,
-    rx: &Receiver<TaskbarCommand>,
-) -> bool {
-    const DELAYS_MS: &[u64] = &[0, 50, 150, 300, 600];
-    let mut current_width = initial_width;
-
-    for &delay_ms in DELAYS_MS {
-        if delay_ms > 0 {
-            match rx.recv_timeout(Duration::from_millis(delay_ms)) {
-                Ok(TaskbarCommand::Update { width }) => current_width = width,
-                Ok(TaskbarCommand::Embed { hwnd_ptr }) => {
-                    if let Some(hwnd) = take_valid_hwnd(hwnd_ptr)
-                        && let Some(s) = strategy.as_ref()
-                    {
-                        s.embed_window(hwnd);
-                    }
-                }
-                Ok(TaskbarCommand::Reinit) => {
-                    // 重试期间 explorer 重启，策略彻底重建，退出本轮重试由外层走新一轮
-                    return true;
-                }
-                Ok(TaskbarCommand::Stop) => return false,
-                Err(RecvTimeoutError::Timeout) => {}
-                Err(RecvTimeoutError::Disconnected) => return false,
-            }
+        while !pending.stopped {
+            let Ok(command) = rx.try_recv() else { break };
+            pending.apply(command);
+        }
+        if pending.stopped {
+            break;
         }
 
-        if let Some(s) = strategy.as_mut() {
-            let params = LayoutParams {
-                lyric_width: current_width,
-            };
-            if let Some(layout) = s.update_layout(params) {
-                let js_layout: JsTaskbarLayout = layout.into();
-                tsfn.call(js_layout, ThreadsafeFunctionCallMode::NonBlocking);
-                return true;
+        let now = Instant::now();
+        if now >= next_poll || pending.reinit {
+            let current = TaskbarSnapshot::capture();
+            let identity = |value: Option<TaskbarSnapshot>| value.map(|s| (s.hwnd, s.process_id));
+            if identity(current) != identity(snapshot) || pending.reinit {
+                strategy = None;
+                pending.update = true;
             }
+            if identity(current) != identity(snapshot)
+                && let Some(mut layout) = visible_layout.take()
+            {
+                layout.space = AvailableSpace::default();
+                tsfn.call(layout.into(), ThreadsafeFunctionCallMode::NonBlocking);
+            }
+            if current != snapshot {
+                pending.update = true;
+            }
+            snapshot = current;
+            pending.reinit = false;
+            next_poll = now + TASKBAR_POLL_INTERVAL;
+        }
+
+        if !snapshot.is_some_and(|s| s.visible) {
+            if let Some(mut layout) = visible_layout.take() {
+                layout.space = AvailableSpace::default();
+                tsfn.call(layout.into(), ThreadsafeFunctionCallMode::NonBlocking);
+            }
+            retry_at = None;
+            continue;
+        }
+        let Some(width) = pending.width else { continue };
+        if !pending.update && !retry_at.is_some_and(|retry| now >= retry) {
+            continue;
+        }
+        if pending.update {
+            retry_index = 0;
+        }
+        pending.update = false;
+        if strategy.is_none() {
+            strategy = create_strategy();
+        }
+        let layout = strategy
+            .as_mut()
+            .and_then(|s| s.update_layout(LayoutParams { lyric_width: width }));
+        if let Some(layout) = layout {
+            visible_layout = Some(layout);
+            tsfn.call(layout.into(), ThreadsafeFunctionCallMode::NonBlocking);
+            retry_at = None;
+        } else {
+            // UIA 在任务栏交互期间可能暂不可读，保留同一任务栏的最近布局直到重试成功
+            retry_at = Some(Instant::now() + Duration::from_millis(RETRY_DELAYS_MS[retry_index]));
+            retry_index = (retry_index + 1).min(RETRY_DELAYS_MS.len() - 1);
         }
     }
-
-    true
+    // 策略在 COM apartment 退出前释放，Windows 10 仅对仍有效的任务栏恢复尺寸
 }
 
+/// 按系统版本选择任务栏布局策略
+/// @returns - 任务栏正在重建时返回 None，后续定时重试
 fn create_strategy() -> Option<Box<dyn TaskbarStrategy>> {
-    let build_num = get_windows_build_number();
-
     let (mut primary, mut secondary): (Box<dyn TaskbarStrategy>, Box<dyn TaskbarStrategy>) =
-        if build_num >= 22000 {
+        if get_windows_build_number() >= 22000 {
             (
                 Box::new(Win11Strategy::new()),
                 Box::new(LegacyStrategy::new()),
@@ -266,14 +203,38 @@ fn create_strategy() -> Option<Box<dyn TaskbarStrategy>> {
                 Box::new(Win11Strategy::new()),
             )
         };
-
     if primary.init() {
         return Some(primary);
     }
-
     if secondary.init() {
         return Some(secondary);
     }
-
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PendingCommands, TaskbarCommand};
+
+    /// 重试期间的重建请求不能被后续宽度更新吞掉
+    #[test]
+    fn reinit_survives_coalesced_updates() {
+        let mut pending = PendingCommands::default();
+        pending.apply(TaskbarCommand::Update { width: 400 });
+        pending.update = false;
+        pending.apply(TaskbarCommand::Reinit);
+        pending.apply(TaskbarCommand::Update { width: 600 });
+        assert!(pending.reinit && pending.update);
+        assert_eq!(pending.width, Some(600));
+    }
+
+    /// 恢复期间关闭服务必须保留停止信号
+    #[test]
+    fn stop_survives_recovery_commands() {
+        let mut pending = PendingCommands::default();
+        pending.apply(TaskbarCommand::Reinit);
+        pending.apply(TaskbarCommand::Stop);
+        pending.apply(TaskbarCommand::Update { width: 500 });
+        assert!(pending.stopped);
+    }
 }

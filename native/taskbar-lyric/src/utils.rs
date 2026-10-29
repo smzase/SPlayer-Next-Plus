@@ -9,8 +9,7 @@ use windows::{
             },
         },
         UI::WindowsAndMessaging::{
-            FindWindowExW, GetWindowLongPtrW, GetWindowThreadProcessId, MSG, PM_NOREMOVE,
-            PeekMessageW, SetWindowLongPtrW, WINDOW_LONG_PTR_INDEX, WM_USER,
+            FindWindowExW, GetWindowThreadProcessId, MSG, PM_NOREMOVE, PeekMessageW, WM_USER,
         },
     },
     core::{PCWSTR, PWSTR, w},
@@ -36,16 +35,6 @@ pub fn ensure_thread_message_queue() {
     unsafe {
         let _ = PeekMessageW(&raw mut msg, None, WM_USER, WM_USER, PM_NOREMOVE);
     }
-}
-
-pub unsafe fn modify_window_long(
-    hwnd: HWND,
-    index: WINDOW_LONG_PTR_INDEX,
-    f: impl FnOnce(u32) -> u32,
-) {
-    let current = unsafe { GetWindowLongPtrW(hwnd, index) };
-    let new_value = f(current as u32);
-    unsafe { SetWindowLongPtrW(hwnd, index, new_value as isize) };
 }
 
 pub fn check_registry_value<F>(value_name: &str, predicate: F, default: bool) -> bool

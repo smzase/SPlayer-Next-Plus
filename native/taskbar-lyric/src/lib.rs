@@ -1,19 +1,13 @@
 //! Windows 任务栏歌词原生模块
-//! 通过 NAPI-RS 暴露给 Node.js，将 Electron BrowserWindow 嵌入 Windows 任务栏
-
-use std::ffi::c_void;
+//! 通过 NAPI-RS 暴露给 Node.js，提供任务栏布局及独立于 Chromium 的原生画布
 
 use napi::{
     bindgen_prelude::Function,
     threadsafe_function::{ThreadsafeFunctionCallMode, UnknownReturnValue},
 };
 use napi_derive::napi;
-use windows::Win32::{
-    Foundation::HWND,
-    UI::{
-        Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_MBUTTON, VK_RBUTTON},
-        WindowsAndMessaging::IsWindow,
-    },
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    GetAsyncKeyState, VK_LBUTTON, VK_MBUTTON, VK_RBUTTON,
 };
 
 /// 任务列表和歌词之间的微小间距
@@ -32,9 +26,11 @@ pub fn is_mouse_button_active() -> bool {
 
 #[macro_use]
 mod logger;
+mod overlay;
 mod registry_watcher;
 mod service;
 mod strategy;
+mod surface;
 mod taskbar_created_watcher;
 mod tray_watcher;
 mod uia;
@@ -102,21 +98,6 @@ impl From<strategy::TaskbarLayout> for JsTaskbarLayout {
                 is_light: layout.extra.is_light,
             },
         }
-    }
-}
-
-/// JS 侧传来的 hwnd_ptr 转 HWND，并用 `IsWindow` 校验。
-///
-/// JS 通常给的是 Electron BrowserWindow.getNativeWindowHandle()，绝大多数情况有效；
-/// 但窗口已 destroyed / JS 传错指针时拿到的就是无效句柄，继续传给 Win32 API 行为未定义
-pub(crate) fn take_valid_hwnd(hwnd_ptr: usize) -> Option<HWND> {
-    let hwnd = HWND(hwnd_ptr as *mut c_void);
-    // SAFETY: IsWindow 接受任意指针，对非法值返回 false 而非崩溃
-    if unsafe { IsWindow(Some(hwnd)) }.as_bool() {
-        Some(hwnd)
-    } else {
-        warn!("无效 HWND (0x{hwnd_ptr:x})，跳过");
-        None
     }
 }
 

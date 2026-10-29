@@ -1,7 +1,10 @@
 use windows::{
     Win32::{
         Foundation::{HWND, RECT},
-        UI::WindowsAndMessaging::{FindWindowExW, GetWindowRect, MoveWindow},
+        UI::WindowsAndMessaging::{
+            FindWindowExW, GA_ROOT, GetAncestor, GetParent, GetWindowRect, SWP_ASYNCWINDOWPOS,
+            SWP_NOACTIVATE, SWP_NOZORDER, SetWindowPos,
+        },
     },
     core::{PCWSTR, w},
 };
@@ -28,6 +31,34 @@ impl LegacyStrategy {
             h_taskbar: HWND::default(),
             h_rebar: HWND::default(),
             h_tasklist: HWND::default(),
+        }
+    }
+
+    /**
+     * 异步调整任务列表尺寸，避免等待 Explorer 的窗口过程
+     * @param x - 父窗口内的横坐标
+     * @param y - 父窗口内的纵坐标
+     * @param width - 目标宽度
+     * @param height - 目标高度
+     * @returns - Win32 调整请求结果
+     */
+    fn resize_tasklist(
+        &self,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+    ) -> windows::core::Result<()> {
+        unsafe {
+            SetWindowPos(
+                self.h_tasklist,
+                None,
+                x,
+                y,
+                width,
+                height,
+                SWP_NOACTIVATE | SWP_NOZORDER | SWP_ASYNCWINDOWPOS,
+            )
         }
     }
 
@@ -81,24 +112,25 @@ impl TaskbarStrategy for LegacyStrategy {
         true
     }
 
-    fn embed_window(&self, child_wnd: HWND) -> bool {
-        super::embed_child_window(child_wnd, self.h_taskbar)
-    }
-
+    /**
+     * 为 Windows 10 保留歌词区域并返回屏幕物理像素坐标
+     * @param params - 歌词所需宽度
+     * @returns - 任务栏句柄失效或尺寸不可读时返回 None
+     */
     fn update_layout(&mut self, params: LayoutParams) -> Option<TaskbarLayout> {
-        if self.h_rebar.0.is_null() || self.h_tasklist.0.is_null() {
+        if find_taskbar_hwnd() != Some(self.h_taskbar)
+            || unsafe { GetAncestor(self.h_rebar, GA_ROOT) } != self.h_taskbar
+            || unsafe { GetParent(self.h_tasklist) }.ok() != Some(self.h_rebar)
+        {
             return None;
         }
 
         unsafe {
             let mut rc_rebar = RECT::default();
-            let _ = GetWindowRect(self.h_rebar, &raw mut rc_rebar);
-
-            let mut rc_taskbar = RECT::default();
-            let _ = GetWindowRect(self.h_taskbar, &raw mut rc_taskbar);
+            GetWindowRect(self.h_rebar, &raw mut rc_rebar).ok()?;
 
             let mut rc_tasklist = RECT::default();
-            let _ = GetWindowRect(self.h_tasklist, &raw mut rc_tasklist);
+            GetWindowRect(self.h_tasklist, &raw mut rc_tasklist).ok()?;
 
             let rebar_w = rc_rebar.right - rc_rebar.left;
             let rebar_h = rc_rebar.bottom - rc_rebar.top;
@@ -109,20 +141,15 @@ impl TaskbarStrategy for LegacyStrategy {
                 let new_tasklist_h = rebar_h - offset_y - params.lyric_width - GAP;
                 if new_tasklist_h < 0 {
                     // 空间不够时恢复 tasklist 原高度并返回 0 高——不能强压按钮区，会挤成一条线
-                    let _ = MoveWindow(
-                        self.h_tasklist,
-                        0,
-                        offset_y,
-                        rebar_w,
-                        rebar_h - offset_y,
-                        true,
-                    );
+                    self.resize_tasklist(0, offset_y, rebar_w, rebar_h - offset_y)
+                        .ok()?;
                     (0, 0, 0, 0)
                 } else {
-                    let _ = MoveWindow(self.h_tasklist, 0, offset_y, rebar_w, new_tasklist_h, true);
+                    self.resize_tasklist(0, offset_y, rebar_w, new_tasklist_h)
+                        .ok()?;
                     (
-                        rc_rebar.left - rc_taskbar.left,
-                        (rc_rebar.top - rc_taskbar.top) + offset_y + new_tasklist_h + GAP,
+                        rc_rebar.left,
+                        rc_rebar.top + offset_y + new_tasklist_h + GAP,
                         rebar_w,
                         params.lyric_width,
                     )
@@ -131,20 +158,15 @@ impl TaskbarStrategy for LegacyStrategy {
                 let offset_x = rc_tasklist.left - rc_rebar.left;
                 let new_tasklist_w = rebar_w - offset_x - params.lyric_width - GAP;
                 if new_tasklist_w < 0 {
-                    let _ = MoveWindow(
-                        self.h_tasklist,
-                        offset_x,
-                        0,
-                        rebar_w - offset_x,
-                        rebar_h,
-                        true,
-                    );
+                    self.resize_tasklist(offset_x, 0, rebar_w - offset_x, rebar_h)
+                        .ok()?;
                     (0, 0, 0, 0)
                 } else {
-                    let _ = MoveWindow(self.h_tasklist, offset_x, 0, new_tasklist_w, rebar_h, true);
+                    self.resize_tasklist(offset_x, 0, new_tasklist_w, rebar_h)
+                        .ok()?;
                     (
-                        (rc_rebar.left - rc_taskbar.left) + offset_x + new_tasklist_w + GAP,
-                        rc_rebar.top - rc_taskbar.top,
+                        rc_rebar.left + offset_x + new_tasklist_w + GAP,
+                        rc_rebar.top,
                         params.lyric_width,
                         rebar_h,
                     )
@@ -174,17 +196,25 @@ impl TaskbarStrategy for LegacyStrategy {
         }
     }
 
+    /** 仅在任务栏和原有子窗口仍匹配时恢复任务列表尺寸 */
     fn restore(&self) {
-        if self.h_rebar.0.is_null() || self.h_tasklist.0.is_null() {
+        if find_taskbar_hwnd() != Some(self.h_taskbar)
+            || unsafe { GetAncestor(self.h_rebar, GA_ROOT) } != self.h_taskbar
+            || unsafe { GetParent(self.h_tasklist) }.ok() != Some(self.h_rebar)
+        {
             return;
         }
 
         unsafe {
             let mut rc_rebar = RECT::default();
-            let _ = GetWindowRect(self.h_rebar, &raw mut rc_rebar);
+            if GetWindowRect(self.h_rebar, &raw mut rc_rebar).is_err() {
+                return;
+            }
 
             let mut rc_tasklist = RECT::default();
-            let _ = GetWindowRect(self.h_tasklist, &raw mut rc_tasklist);
+            if GetWindowRect(self.h_tasklist, &raw mut rc_tasklist).is_err() {
+                return;
+            }
 
             let rebar_w = rc_rebar.right - rc_rebar.left;
             let rebar_h = rc_rebar.bottom - rc_rebar.top;
@@ -193,11 +223,11 @@ impl TaskbarStrategy for LegacyStrategy {
             if is_vertical {
                 let offset_y = rc_tasklist.top - rc_rebar.top;
                 let original_height = rebar_h - offset_y;
-                let _ = MoveWindow(self.h_tasklist, 0, offset_y, rebar_w, original_height, true);
+                let _ = self.resize_tasklist(0, offset_y, rebar_w, original_height);
             } else {
                 let offset_x = rc_tasklist.left - rc_rebar.left;
                 let original_width = rebar_w - offset_x;
-                let _ = MoveWindow(self.h_tasklist, offset_x, 0, original_width, rebar_h, true);
+                let _ = self.resize_tasklist(offset_x, 0, original_width, rebar_h);
             }
         }
     }

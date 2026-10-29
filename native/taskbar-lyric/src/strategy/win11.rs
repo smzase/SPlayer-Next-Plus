@@ -53,18 +53,19 @@ impl TaskbarStrategy for Win11Strategy {
         true
     }
 
-    fn embed_window(&self, child_wnd: HWND) -> bool {
-        super::embed_child_window(child_wnd, self.h_taskbar)
-    }
-
+    /**
+     * 读取任务栏可用区域并返回屏幕物理像素坐标
+     * @param _params - Windows 11 不需要预留固定歌词宽度
+     * @returns - 任务栏或 UIA 暂不可用时返回 None
+     */
     fn update_layout(&mut self, _params: LayoutParams) -> Option<TaskbarLayout> {
-        if self.h_taskbar.0.is_null() {
+        if find_taskbar_hwnd() != Some(self.h_taskbar) {
             return None;
         }
 
         let mut tb_rect = RECT::default();
         unsafe {
-            let _ = GetWindowRect(self.h_taskbar, &raw mut tb_rect);
+            GetWindowRect(self.h_taskbar, &raw mut tb_rect).ok()?;
         }
 
         let tray_rect = unsafe {
@@ -94,7 +95,8 @@ impl TaskbarStrategy for Win11Strategy {
             }
         }
 
-        let uia_bounds = if let Some(scanner) = self.scanner.as_ref() {
+        let uia_bounds = {
+            let scanner = self.scanner.as_ref()?;
             match scanner.scan_taskbar(self.h_taskbar) {
                 Ok(b) => b,
                 Err(_) => {
@@ -103,8 +105,6 @@ impl TaskbarStrategy for Win11Strategy {
                     return None;
                 }
             }
-        } else {
-            return None;
         };
 
         let is_centered = Self::is_taskbar_center_align();
@@ -122,8 +122,8 @@ impl TaskbarStrategy for Win11Strategy {
         let left_width = (content_left - left_x).max(0);
 
         let left_space = Rect {
-            x: left_x - tb_rect.left,
-            y: 0,
+            x: left_x,
+            y: tb_rect.top,
             width: left_width,
             height: tb_height,
         };
@@ -142,8 +142,8 @@ impl TaskbarStrategy for Win11Strategy {
         let right_width = (right_right_edge - right_x).max(0);
 
         let right_space = Rect {
-            x: right_x - tb_rect.left,
-            y: 0,
+            x: right_x,
+            y: tb_rect.top,
             width: right_width,
             height: tb_height,
         };

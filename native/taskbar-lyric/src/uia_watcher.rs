@@ -4,7 +4,11 @@
 #![allow(clippy::inline_always)]
 
 use std::{
-    sync::{Mutex, mpsc},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
     thread,
     time::Duration,
 };
@@ -48,19 +52,25 @@ const DEBOUNCE_MS: u64 = 150;
 //（其 runtime_id 参数是指针传递，不经历 shim 的 owned drop，安全）。
 #[implement(IUIAutomationStructureChangedEventHandler)]
 pub struct TaskbarEventHandler {
-    pulse: Mutex<mpsc::Sender<()>>,
+    pulse: Mutex<mpsc::SyncSender<()>>,
 }
 
 impl TaskbarEventHandler {
-    pub fn new(pulse: mpsc::Sender<()>) -> Self {
+    /**
+     * 创建只保留一个待处理通知的 UIA 回调
+     * @param pulse - 有界布局通知通道
+     * @returns - UIA 结构变化处理器
+     */
+    pub fn new(pulse: mpsc::SyncSender<()>) -> Self {
         Self {
             pulse: Mutex::new(pulse),
         }
     }
 
+    /** 合并尚未消费的结构变化，避免 Explorer 重建时堆积事件 */
     fn notify(&self) {
         if let Ok(tx) = self.pulse.lock() {
-            let _ = tx.send(());
+            let _ = tx.try_send(());
         }
     }
 }
@@ -79,25 +89,38 @@ impl IUIAutomationStructureChangedEventHandler_Impl for TaskbarEventHandler_Impl
 
 pub struct UiaWatcher {
     thread_id: Option<u32>,
+    stopped: Arc<AtomicBool>,
 }
 
 impl UiaWatcher {
+    /**
+     * 在独立 COM 线程监听任务栏结构变化
+     * @param callback - 去抖后的布局变化通知
+     * @returns - 可停止的 UIA 监听器
+     */
     pub fn new(callback: LayoutChangedCallback) -> Result<Self> {
         let (tid_tx, tid_rx) = mpsc::channel::<u32>();
-        let (pulse_tx, pulse_rx) = mpsc::channel::<()>();
+        let (pulse_tx, pulse_rx) = mpsc::sync_channel::<()>(1);
+        let stopped = Arc::new(AtomicBool::new(false));
+        let debounce_stopped = Arc::clone(&stopped);
 
         // 去抖线程：DEBOUNCE_MS 窗口内的多次 pulse 聚合成一次 callback
         // 不能在 COM 事件 handler 里直接 sleep——会阻塞 UIA 事件循环
         thread::spawn(move || {
             while pulse_rx.recv().is_ok() {
                 loop {
+                    if debounce_stopped.load(Ordering::Acquire) {
+                        return;
+                    }
                     match pulse_rx.recv_timeout(Duration::from_millis(DEBOUNCE_MS)) {
                         Ok(()) => continue,
                         Err(mpsc::RecvTimeoutError::Timeout) => break,
                         Err(mpsc::RecvTimeoutError::Disconnected) => return,
                     }
                 }
-                callback();
+                if !debounce_stopped.load(Ordering::Acquire) {
+                    callback();
+                }
             }
         });
 
@@ -130,19 +153,22 @@ impl UiaWatcher {
                     &struct_handler,
                 );
 
-                Some(struct_handler)
+                Some((root_element, struct_handler))
             } else {
                 None
             };
 
             let mut msg = MSG::default();
-            while GetMessageW(&raw mut msg, None, 0, 0).as_bool() {
+            while GetMessageW(&raw mut msg, None, 0, 0).0 > 0 {
                 let _ = TranslateMessage(&raw const msg);
                 let _ = DispatchMessageW(&raw const msg);
             }
 
-            if let Ok(automation) = automation_res {
-                let _ = automation.RemoveAllEventHandlers();
+            if let Ok(automation) = automation_res
+                && let Some((root, handler)) = _handlers_guard.as_ref()
+            {
+                // 旧监听器异步退出时只注销自身，不能移除新一轮已注册的监听
+                let _ = automation.RemoveStructureChangedEventHandler(root, handler);
             }
 
             drop(_handlers_guard);
@@ -155,10 +181,13 @@ impl UiaWatcher {
 
         Ok(Self {
             thread_id: Some(thread_id),
+            stopped,
         })
     }
 
+    /** 立即屏蔽旧回调，并请求 COM 线程注销自身监听 */
     pub fn stop(&mut self) {
+        self.stopped.store(true, Ordering::Release);
         if let Some(tid) = self.thread_id {
             unsafe {
                 let _ = PostThreadMessageW(tid, WM_QUIT, WPARAM(0), LPARAM(0));
