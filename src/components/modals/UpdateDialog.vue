@@ -7,12 +7,35 @@ import { formatFileSize } from "@/utils/format";
 const { t } = useI18n();
 const update = useUpdateStore();
 
-/** release notes 渲染为 HTML */
-const notesHtml = computed(() =>
-  update.meta?.releaseNotes
-    ? (marked.parse(update.meta.releaseNotes, { async: false }) as string)
-    : "",
-);
+/** 渲染更新正文，隐藏发布页的安装包下载表格和完整比较链接 */
+const notesHtml = computed(() => {
+  const notes = update.meta?.releaseNotes;
+  if (!notes) return "";
+
+  // 更新清单可携带 Markdown，GitHub Atom 则返回 HTML，统一解析后按内容筛选
+  const template = document.createElement("template");
+  template.innerHTML = marked.parse(notes, { async: false });
+  for (const table of template.content.querySelectorAll("table")) {
+    const headers = Array.from(table.querySelectorAll("thead th"), (cell) =>
+      cell.textContent?.trim(),
+    );
+    if (
+      headers.join("|") === "系统|架构|下载" &&
+      table.querySelector('a[href*="/releases/download/"]')
+    ) {
+      table.remove();
+    }
+  }
+  for (const paragraph of template.content.querySelectorAll("p")) {
+    if (
+      /^Full Changelog\s*:/i.test(paragraph.textContent?.trim() ?? "") &&
+      paragraph.querySelector('a[href*="/compare/"]')
+    ) {
+      paragraph.remove();
+    }
+  }
+  return template.innerHTML.trim();
+});
 
 /** 发布日期（本地化，空/非法则不显示） */
 const releaseDateText = computed(() => {

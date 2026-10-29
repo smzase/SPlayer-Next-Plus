@@ -5,16 +5,20 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 /**
- * 从实际发布资源生成按系统、架构排列的下载入口
+ * 将自定义更新说明与按系统、架构排列的下载入口组合为发布正文
  * @param {string[]} assets - 发布资源文件名
  * @param {string} version - 应用版本
  * @param {string} repository - GitHub 仓库名称
  * @param {string} tag - 发布标签
- * @returns {string} 发布说明中的下载表格
+ * @param {string} [releaseNotes] - 手动填写的 Markdown，单行输入可用反斜杠 n 换行
+ * @returns {string} 自定义更新说明和下载表格
  */
-const generateReleaseDownloads = (assets, version, repository, tag) => {
+const generateReleaseDownloads = (assets, version, repository, tag, releaseNotes = "") => {
   const baseUrl = `https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}`;
-  const lines = ["| 系统 | 架构 | 下载 |", "| --- | --- | --- |"];
+  // CLI/API 可传入真实多行 Markdown，此时保留代码块等内容中的字面量反斜杠 n
+  const notes = releaseNotes.includes("\n") ? releaseNotes : releaseNotes.replace(/\\n/g, "\n");
+  const lines = notes.trim() ? [notes.trimEnd(), ""] : [];
+  lines.push("| 系统 | 架构 | 下载 |", "| --- | --- | --- |");
   const platforms = [
     [
       "Windows",
@@ -72,7 +76,10 @@ if (require.main === module) {
   const assets = fs
     .readdirSync(assetsDir)
     .filter((name) => fs.statSync(path.join(assetsDir, name)).isFile());
-  fs.writeFileSync(outputFile, generateReleaseDownloads(assets, version, repository, tag));
+  fs.writeFileSync(
+    outputFile,
+    generateReleaseDownloads(assets, version, repository, tag, process.env.RELEASE_NOTES),
+  );
 }
 
 module.exports = { generateReleaseDownloads };
