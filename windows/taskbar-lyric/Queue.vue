@@ -3,6 +3,9 @@ import type { TaskbarLyricSettings } from "@shared/types/settings";
 import type { TaskbarPlaybackSnapshot, TaskbarQueueItem } from "@shared/types/taskbarLyric";
 import type { SVirtualListExposed } from "@/components/ui/SVirtualList.vue";
 import SVirtualList from "@/components/ui/SVirtualList.vue";
+import DragSortPreview from "@/components/list/DragSortPreview.vue";
+import { useDragSort } from "@/composables/useDragSort";
+import { moveItemsToGap } from "@shared/utils/reorder";
 import DEFAULT_COVER from "@/assets/images/song.jpg";
 import IconListMusic from "~icons/lucide/list-music";
 import IconLocate from "~icons/lucide/locate";
@@ -14,6 +17,7 @@ const snapshot = shallowRef<TaskbarPlaybackSnapshot>({
   currentTrackId: null,
   playMode: "repeat-list",
   playModeDisabled: true,
+  dragRightClickAction: "cancel",
   locale: "zh-CN",
   theme: {
     isDark: true,
@@ -99,6 +103,29 @@ const backgroundDimStyle = computed(() => ({
 }));
 
 const items = computed(() => snapshot.value.items);
+const clearConfirmOpen = ref(false);
+const {
+  isDragging,
+  draggedIndex,
+  dropIndicator,
+  dragLabelData,
+  dragLabelPosition,
+  handlePointerDown,
+  suppressClick,
+  cancelDrag,
+} = useDragSort({
+  virtualListRef: listRef,
+  itemCount: computed(() => items.value.length),
+  enabled: computed(() => queueVisible.value && !clearConfirmOpen.value),
+  rightClickAction: computed(() => snapshot.value.dragRightClickAction),
+  triggerMode: "longpress",
+  onReorder: (from, to, gap) => {
+    const trackId = items.value[from].id;
+    const next = moveItemsToGap(items.value, [from], gap);
+    snapshot.value = { ...snapshot.value, items: next };
+    window.api.taskbarLyric.moveTrack(trackId, next[to + 1]?.id ?? null);
+  },
+});
 const currentIndex = computed(() =>
   items.value.findIndex((item) => item.id === snapshot.value.currentTrackId),
 );
@@ -120,9 +147,17 @@ const clearConfirmText = computed(() =>
 );
 const cancelText = computed(() => (isChinese.value ? "取消" : "Cancel"));
 const confirmText = computed(() => (isChinese.value ? "确认" : "Confirm"));
-const clearConfirmOpen = ref(false);
-
+/**
+ * 应用主窗口队列快照，歌曲变化时取消尚未提交的拖动
+ * @param next - 最新播放与主题信息
+ */
 const applySnapshot = (next: TaskbarPlaybackSnapshot): void => {
+  if (
+    next.items.length !== items.value.length ||
+    next.items.some((item, index) => item.id !== items.value[index]?.id)
+  ) {
+    cancelDrag();
+  }
   snapshot.value = next;
 };
 
@@ -148,9 +183,10 @@ const closeQueue = (): void => {
   window.api.taskbarLyric.closeQueue();
 };
 
-watch(currentIndex, (index) => {
-  if (index >= 0) nextTick(() => listRef.value?.scrollToIndex(index));
-});
+watch(
+  () => snapshot.value.currentTrackId,
+  () => nextTick(scrollToCurrent),
+);
 
 const handleKeyDown = (event: KeyboardEvent): void => {
   if (event.key !== "Escape") return;
@@ -197,6 +233,10 @@ onBeforeUnmount(() => {
     :data-appearance="effectiveAppearance"
     :style="queueStyle"
     :aria-hidden="!queueVisible"
+    @click.capture="suppressClick"
+    @dblclick.capture="suppressClick"
+    @contextmenu.capture="suppressClick"
+    @dragstart.prevent
   >
     <div v-if="backgroundVisible" class="queue-background" aria-hidden="true">
       <img
@@ -265,12 +305,22 @@ onBeforeUnmount(() => {
           <template #default="{ item, index }: { item: TaskbarQueueItem; index: number }">
             <div
               class="queue-item"
-              :class="{ 'is-current': item.id === snapshot.currentTrackId }"
+              :class="{
+                'is-current': item.id === snapshot.currentTrackId,
+                'is-dragging': isDragging && draggedIndex === index,
+              }"
               role="button"
               tabindex="0"
+              @mousedown="handlePointerDown($event, index, item)"
+              @touchstart.passive="handlePointerDown($event, index, item)"
               @click="playItem(item)"
               @keydown.enter.prevent="playItem(item)"
             >
+              <span
+                v-if="isDragging && dropIndicator.index === index"
+                class="queue-drop-indicator"
+                :class="dropIndicator.position === 'top' ? 'is-top' : 'is-bottom'"
+              />
               <img
                 class="queue-cover"
                 :src="item.cover || DEFAULT_COVER"
@@ -304,6 +354,16 @@ onBeforeUnmount(() => {
         <span>{{ emptyText }}</span>
       </div>
     </section>
+    <DragSortPreview
+      v-if="isDragging && dragLabelData"
+      :track="dragLabelData"
+      :position="dragLabelPosition"
+      compact
+      :style="{
+        '--drag-preview-surface': snapshot.theme.surfaceBright,
+        '--drag-preview-text': snapshot.theme.onSurface,
+      }"
+    />
     <div v-if="clearConfirmOpen" class="queue-confirm-overlay">
       <div class="queue-confirm" role="dialog" aria-modal="true" :aria-label="clearConfirmTitle">
         <strong>{{ clearConfirmTitle }}</strong>
@@ -318,6 +378,25 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.queue-item.is-dragging {
+  opacity: 0.3;
+}
+.queue-drop-indicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: rgb(var(--queue-primary));
+  pointer-events: none;
+  z-index: 1;
+}
+.queue-drop-indicator.is-top {
+  top: -2px;
+}
+.queue-drop-indicator.is-bottom {
+  bottom: -2px;
+}
 .queue-root {
   position: relative;
   width: 100vw;
@@ -455,6 +534,7 @@ onBeforeUnmount(() => {
   padding: 6px 4px;
 }
 .queue-item {
+  position: relative;
   width: 100%;
   height: 52px;
   display: flex;

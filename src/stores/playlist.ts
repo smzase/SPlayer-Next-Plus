@@ -130,6 +130,16 @@ export const usePlaylistStore = defineStore("playlist", () => {
     });
   };
 
+  /**
+   * 保存歌曲顺序并更新列表摘要
+   * @param id - 歌单 ID
+   * @param trackIds - 全部歌曲的新顺序
+   */
+  const reorderTracks = async (id: string, trackIds: string[]): Promise<void> => {
+    const updated = await window.api.playlist.reorderTracks(id, trackIds);
+    playlists.value = playlists.value.map((item) => (item.id === id ? updated : item));
+  };
+
   /** 清空全部歌单 */
   const clear = async (): Promise<void> => {
     await window.api.playlist.clear();
@@ -148,6 +158,7 @@ export const usePlaylistStore = defineStore("playlist", () => {
     remove,
     addTracks,
     removeTracks,
+    reorderTracks,
     clear,
   };
 });

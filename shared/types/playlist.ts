@@ -54,6 +54,8 @@ export interface PlaylistApi {
   remove: (id: string) => Promise<void>;
   addTracks: (id: string, trackIds: string[]) => Promise<number>;
   removeTracks: (id: string, trackIds: string[]) => Promise<number>;
+  /** 保存全部歌曲的排列顺序 */
+  reorderTracks: (id: string, trackIds: string[]) => Promise<PlaylistSummary>;
   importLegacy: (records: LegacyPlaylistRecord[]) => Promise<void>;
   clear: () => Promise<void>;
 }

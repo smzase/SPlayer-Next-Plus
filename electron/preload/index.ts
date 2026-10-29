@@ -329,6 +329,14 @@ const api = {
       ipcRenderer.invoke("playlist:addTracks", id, trackIds),
     removeTracks: (id: string, trackIds: string[]) =>
       ipcRenderer.invoke("playlist:removeTracks", id, trackIds),
+    /**
+     * 保存本地歌单歌曲顺序
+     * @param id - 歌单 ID
+     * @param trackIds - 全部歌曲的新顺序
+     * @returns 更新后的歌单摘要
+     */
+    reorderTracks: (id: string, trackIds: string[]) =>
+      ipcRenderer.invoke("playlist:reorderTracks", id, trackIds),
     importLegacy: (records: LegacyPlaylistRecord[]) =>
       ipcRenderer.invoke("playlist:importLegacy", records),
     clear: () => ipcRenderer.invoke("playlist:clear"),
@@ -469,6 +477,13 @@ const api = {
     playTrack: (trackId: string) => ipcRenderer.send("taskbarLyric:playTrack", trackId),
     // 移除播放队列中的指定歌曲
     removeTrack: (index: number) => ipcRenderer.send("taskbarLyric:removeTrack", index),
+    /**
+     * 将队列歌曲移动到指定歌曲之前
+     * @param trackId - 移动歌曲 ID
+     * @param beforeTrackId - 目标歌曲 ID，null 表示队尾
+     */
+    moveTrack: (trackId: string, beforeTrackId: string | null) =>
+      ipcRenderer.send("taskbarLyric:moveTrack", trackId, beforeTrackId),
     // 清空播放队列
     clearQueue: () => ipcRenderer.send("taskbarLyric:clearQueue"),
     // 循环切换任务栏四态播放模式

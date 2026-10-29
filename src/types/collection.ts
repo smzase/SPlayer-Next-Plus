@@ -26,6 +26,8 @@ export interface Collection {
   artists?: Artist[];
   /** 歌曲列表 */
   tracks: Track[];
+  /** 服务端完整顺序，保留未返回详情的歌曲 */
+  trackIds?: string[];
   /** 歌曲数量 */
   trackCount?: number;
   /** 创建时间（Unix ms） */

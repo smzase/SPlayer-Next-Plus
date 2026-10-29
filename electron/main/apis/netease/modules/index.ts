@@ -120,6 +120,7 @@ import playlist_subscribe from "./playlist_subscribe";
 import playlist_name_update from "./playlist_name_update";
 import playlist_desc_update from "./playlist_desc_update";
 import playlist_order_update from "./playlist_order_update";
+import song_order_update from "./song_order_update";
 import likelist from "./likelist";
 import like from "./like";
 import like_v1 from "./like_v1";
@@ -255,6 +256,7 @@ export const modules: Record<string, NeteaseModule> = {
   playlist_name_update,
   playlist_desc_update,
   playlist_order_update,
+  song_order_update,
   likelist,
   like,
   like_v1,

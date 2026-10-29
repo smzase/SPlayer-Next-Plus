@@ -6,6 +6,18 @@ import { songsByIds } from "@/apis/song/netease";
 /** song_detail 单批上限 */
 const SONG_DETAIL_BATCH = 500;
 
+/**
+ * 同步歌单内全部歌曲的顺序
+ * @param playlistId - 当前用户的歌单 ID
+ * @param trackIds - 完整歌曲 ID 顺序，包含暂无详情的歌曲
+ */
+export const reorderPlaylistTracks = async (
+  playlistId: string,
+  trackIds: string[],
+): Promise<void> => {
+  ensureOk(await neteaseApi.song_order_update({ pid: playlistId, ids: JSON.stringify(trackIds) }));
+};
+
 /** fetchPlaylist 可选参数 */
 export interface FetchPlaylistOptions {
   /** 元数据回调 */

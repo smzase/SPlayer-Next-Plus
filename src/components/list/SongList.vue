@@ -8,6 +8,8 @@ import { useSettingsStore } from "@/stores/settings";
 import { useDownloadStore } from "@/stores/download";
 import { useTrackMenu } from "@/composables/useTrackMenu";
 import { useMultiSelect } from "@/composables/useMultiSelect";
+import { useDragSort } from "@/composables/useDragSort";
+import { moveItemsToGap } from "@shared/utils/reorder";
 import { useDownload } from "@/composables/useDownload";
 import { useFavorite } from "@/composables/useFavorite";
 import { usePlaylistPicker } from "@/composables/usePlaylistPicker";
@@ -59,6 +61,10 @@ const props = withDefaults(
     playbackContext?: PlaybackContext;
     /** 是否有权从集合移除曲目 */
     canRemove?: boolean;
+    /** 是否有权调整歌单歌曲顺序 */
+    canReorder?: boolean;
+    /** 顺序正在同步 */
+    reordering?: boolean;
     /** 自定义批量移除处理 */
     batchRemove?: (tracks: Track[]) => Promise<void>;
     /** 自定义批量移除文案 */
@@ -86,6 +92,8 @@ const props = withDefaults(
     collectionId: undefined,
     playbackContext: undefined,
     canRemove: true,
+    canReorder: false,
+    reordering: false,
     batchRemove: undefined,
     batchRemoveLabel: undefined,
     hasMore: false,
@@ -321,6 +329,40 @@ const batch = useMultiSelect(sortedItems, {
 });
 const { deleteConfirmOpen, deleteDialogTitle, deleteDialogContent } = batch;
 
+const dragEnabled = computed(
+  () =>
+    props.canReorder &&
+    !props.reordering &&
+    !props.searchQuery.trim() &&
+    sortPreference.value.field === "none",
+);
+const {
+  isDragging,
+  draggedIndices,
+  dropIndicator,
+  dragLabelData,
+  dragLabelPosition,
+  handlePointerDown,
+  suppressClick,
+  cancelDrag,
+} = useDragSort({
+  virtualListRef,
+  itemCount: computed(() => sortedItems.value.length),
+  enabled: dragEnabled,
+  rightClickAction: computed(() => settings.appearance.dragRightClickAction),
+  triggerMode: "longpress",
+  getDragIndices: (index) =>
+    batch.active.value && batch.selectedIds.value.has(sortedItems.value[index].id)
+      ? sortedItems.value.flatMap((item, i) => (batch.selectedIds.value.has(item.id) ? [i] : []))
+      : [index],
+  onReorder: (_from, _to, gap, indices) => {
+    const next = moveItemsToGap(sortedItems.value, indices, gap);
+    if (next.some((item, i) => item !== sortedItems.value[i])) emit("reorder", next);
+  },
+});
+watch(sortedItems, cancelDrag);
+watch(() => batch.active.value, cancelDrag);
+
 /** 是否使用紧凑列表样式 */
 const isCompactList = computed(() => settings.appearance.songListStyle === "compact");
 
@@ -446,6 +488,7 @@ const emit = defineEmits<{
   scroll: [event: Event];
   reachBottom: [];
   change: [removedIds: string[]];
+  reorder: [tracks: Track[]];
   cloudMatch: [track: Track];
 }>();
 
@@ -458,7 +501,17 @@ defineExpose({
 </script>
 
 <template>
-  <div class="relative h-full" @contextmenu.capture="onListContextMenu">
+  <div
+    class="relative h-full"
+    :class="{ 'select-none': dragEnabled }"
+    @click.capture="suppressClick"
+    @dblclick.capture="suppressClick"
+    @dragstart.prevent
+    @contextmenu.capture="
+      suppressClick($event);
+      onListContextMenu($event);
+    "
+  >
     <SContextMenu :items="contextMenuItems" @select="onContextMenu">
       <template #header>
         <div v-if="contextTrack">
@@ -697,10 +750,18 @@ defineExpose({
         </template>
         <!-- 列表项 -->
         <template #default="{ item, index }: { item: Track; index: number }">
-          <div :class="isCompactList ? 'px-3' : 'px-3 pb-3'">
+          <div class="relative" :class="isCompactList ? 'px-3' : 'px-3 pb-3'">
+            <div
+              v-if="isDragging && dropIndicator.index === index"
+              class="absolute left-3 right-3 h-0.5 rounded-full z-10 pointer-events-none bg-primary"
+              :class="dropIndicator.position === 'top' ? 'top-0' : 'bottom-0'"
+            />
             <div
               data-song-item
               :class="trackRowClass(item)"
+              :style="isDragging && draggedIndices.includes(index) ? { opacity: 0.3 } : undefined"
+              @mousedown="handlePointerDown($event, index, item)"
+              @touchstart.passive="handlePointerDown($event, index, item)"
               @click="batch.active.value ? batch.toggle(item.id) : undefined"
               @dblclick="onTrackDblClick(item, index)"
               @contextmenu="contextTrack = item"
@@ -1021,6 +1082,18 @@ defineExpose({
         </div>
       </Transition>
     </div>
+    <Teleport to="body">
+      <DragSortPreview
+        v-if="isDragging && dragLabelData"
+        :track="dragLabelData"
+        :position="dragLabelPosition"
+        :selection-label="
+          draggedIndices.length > 1
+            ? t('songList.batch.selected', { count: draggedIndices.length })
+            : undefined
+        "
+      />
+    </Teleport>
     <!-- 删除确认弹窗 -->
     <SDialog v-model:open="deleteConfirmOpen" :title="deleteDialogTitle">
       <p class="text-sm text-on-surface-variant">{{ deleteDialogContent }}</p>

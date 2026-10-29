@@ -10,12 +10,21 @@ import playlistSubscribe from "./playlist_subscribe";
 import albumSub from "./album_sub";
 import artistSub from "./artist_sub";
 import songLike from "./song_like";
+import songOrderUpdate from "./song_order_update";
 
 const response = { status: 200, body: { code: 200 }, cookie: [] };
 const request = vi.fn();
 
 describe("收藏模块使用公共网页请求配置", () => {
   beforeEach(() => request.mockReset().mockResolvedValue(response));
+  it("歌曲排序提交完整 ID 顺序，复用登录态和网页请求配置", async () => {
+    await songOrderUpdate({ pid: "p", ids: '["3","1","2"]' }, request);
+    expect(request).toHaveBeenCalledWith(
+      "/api/playlist/manipulate/tracks",
+      { pid: "p", trackIds: '["3","1","2"]', op: "update" },
+      expect.objectContaining({ client: "web", crypto: "weapi" }),
+    );
+  });
   it.each([301, 302, 401, 502, 512])(
     "歌单添加业务 %s 原样返回，不通过重复 ID 强制重试",
     async (code) => {

@@ -2,10 +2,14 @@
 import type { Track } from "@shared/types/player";
 import type { SVirtualListExposed } from "@/components/ui/SVirtualList.vue";
 import { useQueuePanel } from "@/composables/useQueuePanel";
+import { useDragSort } from "@/composables/useDragSort";
+import { useSettingsStore } from "@/stores/settings";
+import * as player from "@/core/player";
 
 defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
+const settings = useSettingsStore();
 const listRef = shallowRef<SVirtualListExposed | null>(null);
 const {
   statusStore,
@@ -18,10 +22,34 @@ const {
   clearAll,
   scrollToCurrent,
 } = useQueuePanel({ listRef });
+
+const {
+  isDragging,
+  draggedIndex,
+  dropIndicator,
+  dragLabelData,
+  dragLabelPosition,
+  handlePointerDown,
+  suppressClick,
+  cancelDrag,
+} = useDragSort({
+  virtualListRef: listRef,
+  itemCount: queueLength,
+  rightClickAction: computed(() => settings.appearance.dragRightClickAction),
+  triggerMode: "longpress",
+  onReorder: (from, to) => player.moveInQueue(from, to),
+});
+watch(queue, cancelDrag);
 </script>
 
 <template>
-  <div class="flex flex-col h-full text-cover">
+  <div
+    class="flex flex-col h-full text-cover select-none"
+    @click.capture="suppressClick"
+    @dblclick.capture="suppressClick"
+    @contextmenu.capture="suppressClick"
+    @dragstart.prevent
+  >
     <div class="shrink-0 flex items-start justify-between gap-4 pl-1 pr-20 pb-4">
       <div class="flex flex-col min-w-0 pl-2.5">
         <h2 class="m-0 text-2xl font-semibold leading-tight truncate">
@@ -81,13 +109,21 @@ const {
         <template #default="{ item, index }: { item: Track; index: number }">
           <div class="relative pl-1 pr-20 py-1">
             <div
+              v-if="isDragging && dropIndicator.index === index"
+              class="absolute left-1 right-20 h-0.5 rounded-full z-10 pointer-events-none bg-cover"
+              :class="dropIndicator.position === 'top' ? 'top-0' : 'bottom-0'"
+            />
+            <div
               class="group relative flex items-center gap-3 px-2.5 h-16 rounded-xl cursor-pointer transition-[background-color] duration-150"
               :class="
                 index === statusStore.playIndex
                   ? 'bg-cover/14 text-cover'
                   : 'hover:bg-cover/8 active:bg-cover/12'
               "
+              :style="isDragging && draggedIndex === index ? { opacity: 0.3 } : undefined"
               @click="playAt(index)"
+              @mousedown="handlePointerDown($event, index, item)"
+              @touchstart.passive="handlePointerDown($event, index, item)"
             >
               <!-- 当前播放：左侧 indicator -->
               <span
@@ -127,6 +163,14 @@ const {
       </div>
     </div>
 
+    <Teleport to="body">
+      <DragSortPreview
+        v-if="isDragging && dragLabelData"
+        :track="dragLabelData"
+        :position="dragLabelPosition"
+        compact
+      />
+    </Teleport>
     <!-- 清空确认 -->
     <SDialog v-model:open="clearConfirmOpen" :title="t('playlist.clearConfirmTitle')">
       {{ t("playlist.clearConfirmContent") }}

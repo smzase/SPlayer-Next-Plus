@@ -27,7 +27,9 @@ import {
   addToPlaylist,
   removeFromPlaylist,
   subscribePlaylist,
+  reorderPlaylistTracks,
 } from "@/apis/playlist/netease";
+import { reorderVisibleIds } from "@shared/utils/reorder";
 import { subscribeAlbum } from "@/apis/album/netease";
 import { subscribeArtist } from "@/apis/artist/netease";
 import {
@@ -144,6 +146,7 @@ export const useUserStore = defineStore(
     const likedPlaylistTracks = shallowRef<Track[]>([]);
     /** 是否在拉取歌单曲目 */
     const likedPlaylistLoading = ref(false);
+    const likedPlaylistReordering = ref(false);
     /** 当前 tracks 关联的 playlistId */
     let currentLikedPlaylistId: string | null = null;
     /** 进行中的拉取 */
@@ -316,8 +319,10 @@ export const useUserStore = defineStore(
       level.value = undefined;
       subcount.value = EMPTY_SUBCOUNT;
       likedPlaylistAbort?.abort();
+      likedPlaylistAbort = null;
       likedPlaylistTracks.value = [];
       likedPlaylistLoading.value = false;
+      likedPlaylistReordering.value = false;
       currentLikedPlaylistId = null;
       cloudAbort?.abort();
       cloudTracks.value = [];
@@ -372,20 +377,24 @@ export const useUserStore = defineStore(
     const persistLikedPlaylistCache = (playlistId: string, tracks: Track[]): void => {
       const payload: LikedPlaylistCache = {
         playlistId,
-        tracks: tracks.map((track) => ({ ...track })),
+        tracks: toRaw(tracks).map((track) => toRaw(track)),
         trackIds: likedPlaylistSongIds ?? undefined,
         cachedAt: Date.now(),
       };
       cacheDb.setItem(LIKED_PLAYLIST_CACHE_KEY, payload).catch(() => {});
     };
 
-    /** 拉取最新喜欢歌单曲目 */
+    /**
+     * 拉取最新喜欢歌单曲目，排序同步期间保留本地预览
+     * @param playlistId - 喜欢歌单 ID
+     */
     const refreshLikedPlaylist = async (playlistId: string): Promise<void> => {
+      if (likedPlaylistReordering.value) return;
       likedPlaylistAbort?.abort();
       const controller = new AbortController();
       likedPlaylistAbort = controller;
       const likedVersion = likedSongIdsVersion;
-      if (likedPlaylistTracks.value.length === 0) likedPlaylistLoading.value = true;
+      likedPlaylistLoading.value = true;
       try {
         const accumulated: Track[] = [];
         let trackIds: string[] = [];
@@ -400,6 +409,8 @@ export const useUserStore = defineStore(
           },
         });
         if (controller.signal.aborted || likedVersion !== likedSongIdsVersion) return;
+        const order = new Map(trackIds.map((id, index) => [id, index]));
+        accumulated.sort((a, b) => (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity));
         likedPlaylistTracks.value = accumulated;
         likedPlaylistSongIds = trackIds;
         persistLikedPlaylistCache(playlistId, accumulated);
@@ -411,16 +422,18 @@ export const useUserStore = defineStore(
     };
 
     /**
-     * 进入喜欢歌单时核对远端红心列表，避免外部增删被本地缓存掩盖
+     * 进入喜欢歌单时核对远端红心列表，排序同步期间跳过刷新
      * @param force - 强制刷新曲目
      */
     const ensureLikedPlaylist = (force = false): Promise<void> => {
+      if (likedPlaylistReordering.value) return Promise.resolve();
       if (likedPlaylistSyncPromise) return likedPlaylistSyncPromise;
       const uid = profile.value?.userId;
       const playlistId = likedPlaylistId.value;
       if (!uid || !playlistId) return Promise.resolve();
       const requestId = accountVersion;
       const likedVersion = likedSongIdsVersion;
+      likedPlaylistLoading.value = true;
       const pending = (async () => {
         try {
           const firstVisit = currentLikedPlaylistId !== playlistId;
@@ -446,9 +459,56 @@ export const useUserStore = defineStore(
       })();
       likedPlaylistSyncPromise = pending;
       void pending.finally(() => {
-        if (likedPlaylistSyncPromise === pending) likedPlaylistSyncPromise = null;
+        if (likedPlaylistSyncPromise === pending) {
+          likedPlaylistSyncPromise = null;
+          likedPlaylistLoading.value = false;
+        }
       });
       return pending;
+    };
+
+    /**
+     * 同步喜欢歌单顺序并更新缓存，失败时回退本次排序
+     * @param tracks - 排序后的全部可见歌曲，缺失详情的 ID 保留原位
+     */
+    const reorderLikedPlaylist = async (tracks: Track[]): Promise<void> => {
+      const playlistId = likedPlaylistId.value;
+      if (!profile.value || !playlistId) throw new Error("请先登录音乐平台");
+      if (
+        likedPlaylistLoading.value ||
+        likedPlaylistReordering.value ||
+        pendingLikes.size > 0 ||
+        currentLikedPlaylistId !== playlistId ||
+        likedPlaylistSongIds === null
+      ) {
+        throw new Error("喜欢列表正在同步，请稍后重试");
+      }
+      const beforeTracks = likedPlaylistTracks.value;
+      const beforeIds = likedPlaylistSongIds;
+      const nextIds = reorderVisibleIds(
+        beforeIds,
+        beforeTracks.map((track) => track.id),
+        tracks.map((track) => track.id),
+      );
+      const requestId = accountVersion;
+      const nextTracks = [...toRaw(tracks)];
+      likedPlaylistAbort?.abort();
+      likedSongIdsVersion++;
+      likedPlaylistTracks.value = nextTracks;
+      likedPlaylistSongIds = nextIds;
+      likedPlaylistReordering.value = true;
+      try {
+        await reorderPlaylistTracks(playlistId, nextIds);
+        if (requestId === accountVersion) persistLikedPlaylistCache(playlistId, nextTracks);
+      } catch (error) {
+        if (requestId === accountVersion && likedPlaylistTracks.value === nextTracks) {
+          likedPlaylistTracks.value = beforeTracks;
+          likedPlaylistSongIds = beforeIds;
+        }
+        throw error;
+      } finally {
+        if (requestId === accountVersion) likedPlaylistReordering.value = false;
+      }
     };
 
     /** 恢复云盘缓存 */
@@ -642,6 +702,7 @@ export const useUserStore = defineStore(
     const applySongLike = async (trackId: string, like: boolean): Promise<void> => {
       const uid = profile.value?.userId;
       if (!uid) throw new Error("请先登录音乐平台");
+      if (likedPlaylistReordering.value) throw new Error("歌曲顺序正在同步，请稍后重试");
       if (pendingLikes.has(trackId)) throw new Error("该曲目的红心操作正在进行");
       const operation = { wasLiked: likedSongIds.value.has(trackId) };
       pendingLikes.set(trackId, operation);
@@ -1009,6 +1070,8 @@ export const useUserStore = defineStore(
       likedPlaylistId,
       likedPlaylistTracks,
       likedPlaylistLoading,
+      likedPlaylistReordering,
+      reorderLikedPlaylist,
       createdPlaylists,
       subscribedPlaylists,
       isLiked,

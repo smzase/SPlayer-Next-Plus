@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Track } from "@shared/types/player";
+import type { FetchPlaylistOptions } from "@/apis/playlist/netease";
 
 const api = vi.hoisted(() => ({
   fetchAlbum: vi.fn(),
@@ -89,5 +90,23 @@ describe("网易云播客集合加载", () => {
         trackCount: 120,
       }),
     );
+  });
+
+  it("补取详情后按全量歌曲 ID 还原歌单顺序，并保留缺失详情的歌曲 ID", async () => {
+    api.fetchPlaylist.mockImplementation(async (_id: string, options: FetchPlaylistOptions) => {
+      options.onMeta?.({ id: "p", name: "歌单", trackCount: 4 });
+      options.onTrackIds?.(["3", "missing", "1", "2"]);
+      options.onBatch?.([
+        { ...track, id: "2" },
+        { ...track, id: "3" },
+      ]);
+      options.onBatch?.([{ ...track, id: "1" }]);
+    });
+    const onUpdate = vi.fn();
+    await loadNeteaseCollection("playlist", "p", { onUpdate });
+    const result = onUpdate.mock.lastCall![0];
+    expect(result.tracks.map((item: Track) => item.id)).toEqual(["3", "1", "2"]);
+    expect(result.trackIds).toEqual(["3", "missing", "1", "2"]);
+    expect(result.trackCount).toBe(4);
   });
 });

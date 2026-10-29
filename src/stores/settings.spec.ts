@@ -1,3 +1,4 @@
+/* eslint-disable vue/one-component-per-file -- 每个持久化测试需要独立的应用实例 */
 import { createApp } from "vue";
 import { createPinia, setActivePinia } from "pinia";
 import persistedState from "pinia-plugin-persistedstate";
@@ -5,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useSettingsStore } from "./settings";
 import { DEFAULT_SIDEBAR_NAV_GROUPS } from "@/types/settings";
 import { SIDEBAR_NAV_META } from "@/components/layout/sidebarNav";
+import type { DragRightClickAction } from "@shared/types/settings";
 
 beforeEach(() => {
   vi.stubGlobal("api", {
@@ -24,6 +26,39 @@ beforeEach(() => {
 afterEach(() => {
   localStorage.clear();
   vi.unstubAllGlobals();
+});
+
+describe("拖拽右键设置", () => {
+  it.each([
+    { stored: {}, expected: "cancel" },
+    { stored: { cancelDragOnRightClick: true }, expected: "cancel" },
+    { stored: { cancelDragOnRightClick: false }, expected: "keep" },
+    {
+      stored: { dragRightClickAction: "cancel", cancelDragOnRightClick: false },
+      expected: "cancel",
+    },
+    { stored: { dragRightClickAction: "keep" }, expected: "keep" },
+    { stored: { dragRightClickAction: "commit" }, expected: "commit" },
+  ])("迁移旧开关并保留三选一行为：$expected", ({ stored, expected }) => {
+    localStorage.setItem("settings", JSON.stringify({ appearance: stored }));
+    const pinia = createPinia();
+    pinia.use(persistedState);
+    createApp({}).use(pinia);
+    setActivePinia(pinia);
+    const settings = useSettingsStore();
+    expect(settings.appearance.dragRightClickAction).toBe(expected);
+    expect(settings.appearance).not.toHaveProperty("cancelDragOnRightClick");
+    for (const action of ["cancel", "keep", "commit"] satisfies DragRightClickAction[]) {
+      settings.appearance.dragRightClickAction = action;
+      settings.$persist();
+      const savedAppearance = JSON.parse(localStorage.getItem("settings")!).appearance;
+      expect(savedAppearance.dragRightClickAction).toBe(action);
+      expect(savedAppearance).not.toHaveProperty("cancelDragOnRightClick");
+      settings.$hydrate();
+      expect(settings.appearance.dragRightClickAction).toBe(action);
+    }
+    settings.$dispose();
+  });
 });
 
 describe("fork 侧边栏入口迁移", () => {

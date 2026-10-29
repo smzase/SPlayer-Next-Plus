@@ -1,5 +1,5 @@
 import type { RepeatMode, ShuffleMode } from "./player";
-import type { LocaleCode } from "./settings";
+import type { DragRightClickAction, LocaleCode } from "./settings";
 
 /** 任务栏歌词统一播放模式 */
 export type TaskbarPlayMode = "repeat-list" | "repeat-one" | "shuffle" | "sequential";
@@ -40,6 +40,8 @@ export interface TaskbarPlaybackSnapshot {
   currentTrackId: string | null;
   playMode: TaskbarPlayMode;
   playModeDisabled: boolean;
+  /** 拖拽歌曲时的右键行为 */
+  dragRightClickAction: DragRightClickAction;
   locale: LocaleCode;
   theme: TaskbarThemeSnapshot;
 }

@@ -32,6 +32,7 @@ import {
   prevTrack,
   recoverFromSourceFailure,
   removeFromQueue,
+  moveInQueue,
   refreshDevices,
   restartCurrentTrack,
   setRepeatMode,
@@ -200,6 +201,17 @@ export const handleEvent = async (event: PlayerEvent): Promise<void> => {
     case "clearPlaybackQueue":
       clearPlaybackQueue();
       break;
+    case "moveQueueTrack": {
+      const { trackId, beforeTrackId } = event.data;
+      const entries = queueEntries.value;
+      const from = entries.findIndex((entry) => entry.track.id === trackId);
+      const anchor =
+        beforeTrackId === null
+          ? entries.length
+          : entries.findIndex((entry) => entry.track.id === beforeTrackId);
+      if (from >= 0 && anchor >= 0) moveInQueue(from, anchor > from ? anchor - 1 : anchor);
+      break;
+    }
     case "cycleTaskbarPlayMode":
       cycleTaskbarPlayMode();
       break;

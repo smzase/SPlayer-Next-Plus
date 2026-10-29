@@ -16,7 +16,10 @@ const errorMessage = (err: unknown, fallback: string): string =>
   err instanceof Error && err.message ? err.message : fallback;
 
 /**
- * 歌单管理：编辑（改名/改描述）与删除
+ * 提供歌单编辑、删除及歌曲排序权限
+ * @param collection - 当前歌单
+ * @param options - 编辑和删除完成后的回调
+ * @returns 歌单权限、编辑状态和操作方法
  */
 export const usePlaylistManage = (
   collection: Ref<Collection | null>,
@@ -36,6 +39,16 @@ export const usePlaylistManage = (
     const isLiked = userStore.likedPlaylistId === current.id;
     return isCreated && !isLiked;
   });
+
+  /** 歌曲排序权限独立于歌单编辑权限，喜欢歌单也可调整顺序 */
+  const canReorder = computed(
+    () =>
+      canManage.value ||
+      (collection.value?.type === "playlist" &&
+        collection.value.source === "netease" &&
+        userStore.isLoggedIn &&
+        collection.value.id === userStore.likedPlaylistId),
+  );
 
   /** 编辑弹窗 */
   const editOpen = ref(false);
@@ -105,6 +118,7 @@ export const usePlaylistManage = (
 
   return {
     canManage,
+    canReorder,
     editOpen,
     editTitle,
     editDescription,

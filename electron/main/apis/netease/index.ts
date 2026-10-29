@@ -31,6 +31,7 @@ const SESSION_MUTATING: ReadonlySet<string> = new Set([
   "album_sub",
   "playlist_subscribe",
   "playlist_tracks",
+  "song_order_update",
 ]);
 
 /** 不采用缓存的实时接口 */
@@ -78,6 +79,7 @@ const NON_CACHEABLE: ReadonlySet<string> = new Set([
   "playlist_create",
   "playlist_delete",
   "playlist_tracks",
+  "song_order_update",
   "playlist_subscribe",
   "playlist_name_update",
   "playlist_desc_update",

@@ -124,6 +124,61 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe("队列拖拽同步", () => {
+  it.each([
+    [0, 2],
+    [2, 0],
+    [0, 1],
+    [1, 0],
+  ])("移动 %i 到 %i 保留当前歌曲和进度", async (from, to) => {
+    const queue = await import("@/stores/queue");
+    player.moveInQueue(from, to);
+    expect(queue.queue.value[status.playIndex].id).toBe("current");
+    expect(media.track?.id).toBe("current");
+    expect(status.position).toBe(resumePosition);
+    expect(mocks.load).not.toHaveBeenCalled();
+  });
+
+  it("任务栏使用歌曲锚点在最新队列中定位，并忽略失效的歌曲", async () => {
+    const queue = await import("@/stores/queue");
+    player.moveInQueue(1, 2);
+    await events.handleEvent({
+      type: "moveQueueTrack",
+      data: { trackId: "current", beforeTrackId: "next" },
+    });
+    expect(queue.queue.value.map((item) => item.id)).toEqual(["last", "current", "next"]);
+    expect(status.playIndex).toBe(1);
+    await events.handleEvent({
+      type: "moveQueueTrack",
+      data: { trackId: "missing", beforeTrackId: null },
+    });
+    await events.handleEvent({
+      type: "moveQueueTrack",
+      data: { trackId: "current", beforeTrackId: "missing" },
+    });
+    expect(queue.queue.value.map((item) => item.id)).toEqual(["last", "current", "next"]);
+    await events.handleEvent({
+      type: "moveQueueTrack",
+      data: { trackId: "current", beforeTrackId: null },
+    });
+    expect(queue.queue.value.map((item) => item.id)).toEqual(["last", "next", "current"]);
+    expect(status.playIndex).toBe(2);
+    expect(mocks.load).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [-1, 0],
+    [0, 3],
+    [0.5, 1],
+    [NaN, 1],
+  ])("无效索引 %i 到 %i 不改变播放索引", async (from, to) => {
+    const queue = await import("@/stores/queue");
+    player.moveInQueue(from, to);
+    expect(queue.queue.value.map((item) => item.id)).toEqual(["current", "next", "last"]);
+    expect(status.playIndex).toBe(0);
+  });
+});
+
 describe("在线歌曲暂停后地址失效恢复", () => {
   it("暂停数小时后恢复，重新获取官方地址并从原进度续播当前歌曲", async () => {
     await vi.advanceTimersByTimeAsync(6 * 60 * 60 * 1000);

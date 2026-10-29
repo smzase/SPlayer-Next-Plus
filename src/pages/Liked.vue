@@ -7,6 +7,7 @@ import type { DropdownMenuItem } from "@/components/ui/SDropdownMenu.vue";
 import { useLibraryStore } from "@/stores/library";
 import { useUserStore } from "@/stores/user";
 import { useStatusStore } from "@/stores/status";
+import { toast } from "@/composables/useToast";
 import SongList from "@/components/list/SongList.vue";
 import * as player from "@/core/player";
 import IconLucideListChecks from "~icons/lucide/list-checks";
@@ -55,6 +56,24 @@ const currentTracks = computed<Track[]>(() =>
   tab.value === "local" ? localTracks.value : user.likedPlaylistTracks,
 );
 
+const reordering = computed(() =>
+  tab.value === "local" ? library.likedReordering : user.likedPlaylistReordering,
+);
+
+/**
+ * 保存当前喜欢列表的新顺序，具体存储与失败恢复由对应 store 处理
+ * @param tracks - 排序后的全部可见歌曲
+ */
+const handleTracksReordered = async (tracks: Track[]): Promise<void> => {
+  try {
+    if (tab.value === "local") await library.reorderLikedTracks(tracks.map((track) => track.id));
+    else await user.reorderLikedPlaylist(tracks);
+  } catch (error) {
+    console.error("[liked] reorder tracks failed", error);
+    toast.error(t("songList.reorder.failed"));
+  }
+};
+
 const playbackContext = computed<PlaybackContext | undefined>(() => {
   if (tab.value === "local") {
     return { originId: "liked", originType: "page", originName: t("liked.title") };
@@ -89,6 +108,7 @@ const moreMenuItems = computed<DropdownMenuItem[]>(() => {
       key: "refresh",
       label: t("common.refreshCache"),
       icon: markRaw(IconLucideRefreshCw),
+      disabled: reordering.value,
     });
   }
   items.push({
@@ -179,7 +199,10 @@ const handleMoreMenu = (key: string): void => {
           source="local"
           :playback-context="playbackContext"
           sort-key="liked.local"
+          :can-reorder="library.initialized"
+          :reordering="reordering"
           enable-sort
+          @reorder="handleTracksReordered"
         />
       </div>
       <div
@@ -217,7 +240,11 @@ const handleMoreMenu = (key: string): void => {
           :playback-context="playbackContext"
           collection-type="playlist"
           sort-key="liked.online"
+          :can-reorder="!user.likedPlaylistLoading && !!user.likedPlaylistId"
+          :can-remove="!reordering"
+          :reordering="reordering"
           enable-sort
+          @reorder="handleTracksReordered"
         />
       </div>
       <div

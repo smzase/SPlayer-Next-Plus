@@ -82,6 +82,22 @@ const generalCategory: SettingCategory = {
       ],
     },
     {
+      id: "listInteraction",
+      items: [
+        {
+          key: "dragRightClickAction",
+          type: "select",
+          binding: { store: "settings", path: "appearance.dragRightClickAction" },
+          options: [
+            { value: "cancel", labelKey: "settings.dragRightClickAction.cancel" },
+            { value: "keep", labelKey: "settings.dragRightClickAction.keep" },
+            { value: "commit", labelKey: "settings.dragRightClickAction.commit" },
+          ],
+          defaultValue: "cancel",
+        },
+      ],
+    },
+    {
       id: "debug",
       items: [
         {

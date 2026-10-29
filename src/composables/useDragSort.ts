@@ -1,256 +1,338 @@
+import { onDeactivated, onUnmounted, reactive, ref, shallowRef, watch } from "vue";
 import type { ComputedRef, Ref } from "vue";
 import type { SVirtualListExposed } from "@/components/ui/SVirtualList.vue";
+import type { Artist } from "@shared/types/player";
+import type { DragRightClickAction } from "@shared/types/settings";
+
+export interface DragSortPreviewData {
+  title: string;
+  cover?: string;
+  artists: string;
+}
 
 export interface DragSortOptions {
-  /** SVirtualList 组件实例引用 */
+  /** 虚拟列表组件 */
   virtualListRef: Ref<SVirtualListExposed | null>;
   /** 列表项总数 */
   itemCount: ComputedRef<number>;
-  /** 排序完成回调 */
-  onReorder: (fromIndex: number, toIndex: number) => void;
-  /** 滚动区域顶部内边距 */
-  paddingTop?: number;
-  /** 触发模式: handle（手柄点击立即触发）| longpress（长按触发） */
+  /** 单曲目标索引及原列表中的插入间隙 */
+  onReorder: (fromIndex: number, toIndex: number, gapIndex: number, indices: number[]) => void;
+  /** 激活时取得一起移动的索引 */
+  getDragIndices?: (index: number) => number[];
+  /** 当前是否允许拖动 */
+  enabled?: ComputedRef<boolean>;
+  /** 拖拽时的右键行为，默认取消排序 */
+  rightClickAction?: ComputedRef<DragRightClickAction>;
+  /** 手柄立即触发，行内容需同时满足长按与位移阈值 */
   triggerMode?: "handle" | "longpress";
-  /** 长按延迟毫秒数，默认 300 */
-  longPressDelay?: number;
 }
 
 /**
- * 列表拖拽排序 composable，配合 SVirtualList 使用
- * 支持手柄触发和长按触发两种模式，拖拽时自动滚动
+ * 为虚拟列表提供鼠标拖动、触摸长按排序、插入提示和边缘滚动
+ * @param options - 列表引用、排序回调和触发条件
+ * @returns 拖拽状态及行事件处理器
  */
 export const useDragSort = (options: DragSortOptions) => {
-  const {
-    virtualListRef,
-    itemCount,
-    onReorder,
-    paddingTop = 0,
-    triggerMode = "handle",
-    longPressDelay = 300,
-  } = options;
-
+  const { virtualListRef, itemCount } = options;
   const isDragging = ref(false);
   const draggedIndex = ref(-1);
-  const targetIndex = ref(-1);
-  const dropIndicator = reactive({ index: -1, position: "none" as string });
-  const dragLabelData = ref<{ name: string } | null>(null);
+  const draggedIndices = shallowRef<number[]>([]);
+  const dropIndicator = reactive({ index: -1, position: "none" });
+  const dragLabelData = shallowRef<DragSortPreviewData | null>(null);
   const dragLabelPosition = reactive({ top: 0, left: 0 });
-  let listRect: DOMRect | null = null;
-  let autoScrollRafId: number | null = null;
-  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
-  let pendingIndex = -1;
-  let pendingLabelText = "";
-  let pointerStartX = 0;
-  let pointerStartY = 0;
-  const MOVE_THRESHOLD = 5;
+  let gapIndex = -1;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let scrollFrame: number | undefined;
+  let lastScrollTime: number | undefined;
+  let scrollRemainder = 0;
+  let startX = 0;
+  let startY = 0;
+  let holdReady = false;
+  let suppressUntil = 0;
+  let moved = false;
+  let awaitingRelease = false;
 
-  /** 从鼠标或触摸事件中提取坐标 */
-  const getPointerPos = (event: MouseEvent | TouchEvent) => {
-    if ("touches" in event && event.touches.length > 0) {
-      return { x: event.touches[0].clientX, y: event.touches[0].clientY };
-    }
-    return { x: (event as MouseEvent).clientX, y: (event as MouseEvent).clientY };
-  };
-
-  /** 激活拖拽，绑定移动和释放监听 */
-  const activateDrag = (event: MouseEvent | TouchEvent, index: number, labelText: string) => {
-    if (event.cancelable) event.preventDefault();
+  /** 固定激活时的批量范围，并按指针当前位置显示插入提示 */
+  const activateDrag = (): void => {
+    clearTimeout(timer);
+    timer = undefined;
     isDragging.value = true;
-    draggedIndex.value = index;
-    targetIndex.value = index;
-    dragLabelData.value = { name: labelText };
-    const wrapper = virtualListRef.value?.wrapperRef;
-    if (wrapper) listRect = wrapper.getBoundingClientRect();
-    updateDragLabelPosition(event);
-    window.addEventListener("mousemove", handleDragMove);
-    window.addEventListener("touchmove", handleDragMove, { passive: false });
-    window.addEventListener("mouseup", handleDragEnd);
-    window.addEventListener("touchend", handleDragEnd);
+    draggedIndices.value = options.getDragIndices?.(draggedIndex.value) ?? [draggedIndex.value];
+    gapIndex = draggedIndex.value;
+    moved = Math.hypot(dragLabelPosition.left - startX, dragLabelPosition.top - startY) > 5;
+    window.getSelection()?.removeAllRanges();
+    updateTarget();
+    if (moved && scrollFrame === undefined) scrollFrame = requestAnimationFrame(scrollStep);
   };
 
-  /** 处理拖拽移动，更新标签位置并计算目标索引 */
-  const handleDragMove = (event: MouseEvent | TouchEvent) => {
-    if (!isDragging.value) return;
-    if (event.cancelable) event.preventDefault();
-    updateDragLabelPosition(event);
-    const wrapper = virtualListRef.value?.wrapperRef;
-    if (wrapper) listRect = wrapper.getBoundingClientRect();
-    if (!listRect) return;
-    const { y: clientY } = getPointerPos(event);
-    handleAutoScroll(clientY, listRect);
-    calculateTargetIndex(clientY);
+  /** 根据真实滚动位置更新插入间隙，表头和内边距由虚拟列表处理 */
+  const updateTarget = (): void => {
+    const list = virtualListRef.value;
+    const rect = list?.scrollRef?.getBoundingClientRect();
+    if (!list || !rect) return;
+    const offset = dragLabelPosition.top - rect.top + list.scrollRef!.scrollTop;
+    const info = list.getDropInfoByOffset(offset);
+    gapIndex = info.index + (info.position === "bottom" ? 1 : 0);
+    if (offset <= list.getItemTop(0)) gapIndex = 0;
+    if (offset >= list.getItemTop(itemCount.value)) gapIndex = itemCount.value;
+    dropIndicator.index = Math.min(gapIndex, itemCount.value - 1);
+    dropIndicator.position = gapIndex === itemCount.value ? "bottom" : "top";
   };
 
-  /** 处理拖拽释放，触发排序回调 */
-  const handleDragEnd = () => {
-    if (draggedIndex.value !== targetIndex.value && targetIndex.value !== -1) {
-      onReorder(draggedIndex.value, targetIndex.value);
+  /**
+   * 越靠近或超出列表边缘滚动越快，按实际时间计算以兼容不同刷新率
+   * @param timestamp - 当前动画帧时间
+   */
+  const scrollStep = (timestamp: number): void => {
+    scrollFrame = undefined;
+    const list = virtualListRef.value;
+    const rect = list?.scrollRef?.getBoundingClientRect();
+    if (!isDragging.value || !list || !rect) return;
+    const y = dragLabelPosition.top;
+    const edge = 32;
+    const direction =
+      y < rect.top + edge && y < startY - 5 ? -1 : y > rect.bottom - edge && y > startY + 5 ? 1 : 0;
+    if (!direction) {
+      lastScrollTime = undefined;
+      scrollRemainder = 0;
+      return;
     }
-    cleanupDragState();
+    const distance = direction < 0 ? y - rect.top : rect.bottom - y;
+    const pressure = Math.min(1, Math.max(0, (edge - distance) / edge));
+    const outsideDistance = Math.max(0, -distance);
+    // 边缘附近保留精细移动，在窗口有限的拖动空间内即可达到最高速度
+    const speed = 240 * pressure ** 2 + 1560 * Math.min(outsideDistance / 96, 1);
+    const elapsed = lastScrollTime === undefined ? 0 : Math.min(timestamp - lastScrollTime, 32);
+    lastScrollTime = timestamp;
+    const delta = scrollRemainder + (direction * speed * elapsed) / 1000;
+    const amount = Math.trunc(delta);
+    scrollRemainder = delta - amount;
+    if (!amount) {
+      scrollFrame = requestAnimationFrame(scrollStep);
+      return;
+    }
+    const scroller = list.scrollRef!;
+    const before = scroller.scrollTop;
+    list.scrollTo(
+      Math.max(0, Math.min(before + amount, scroller.scrollHeight - scroller.clientHeight)),
+      "auto",
+    );
+    updateTarget();
+    if (scroller.scrollTop !== before) scrollFrame = requestAnimationFrame(scrollStep);
+    else {
+      lastScrollTime = undefined;
+      scrollRemainder = 0;
+    }
   };
 
-  /** 重置所有拖拽状态并移除事件监听 */
-  const cleanupDragState = () => {
-    stopAutoScroll();
-    cancelLongPress();
+  /**
+   * 同时满足按住时长和位移阈值后拖动，触摸长按前保留滚动手势
+   * @param event - 鼠标或触摸移动事件
+   */
+  const handleMove = (event: MouseEvent | TouchEvent): void => {
+    if (awaitingRelease) return;
+    const point = "touches" in event ? event.touches[0] : event;
+    if (!point) return;
+    dragLabelPosition.left = point.clientX;
+    dragLabelPosition.top = point.clientY;
+    if (!isDragging.value) {
+      if (Math.hypot(point.clientX - startX, point.clientY - startY) <= 5) return;
+      if (!holdReady) {
+        if ("touches" in event) cleanupDragState();
+        return;
+      }
+      activateDrag();
+    }
+    if (event.cancelable) event.preventDefault();
+    moved ||= Math.hypot(point.clientX - startX, point.clientY - startY) > 3;
+    updateTarget();
+    if (scrollFrame === undefined) scrollFrame = requestAnimationFrame(scrollStep);
+  };
+
+  /**
+   * 结束拖拽并按需提交排序，提前结束时继续拦截未释放的按键
+   * @param commit - 是否提交当前位置的排序
+   * @param waitForRelease - 是否仍需等待按键释放，防止重复提交或误点击
+   */
+  const finishDrag = (commit: boolean, waitForRelease: boolean): void => {
+    const from = draggedIndex.value;
+    const gap = gapIndex;
+    const active = isDragging.value;
+    const indices = draggedIndices.value;
+    const shouldMove = moved;
+    const to = gap > from ? gap - 1 : gap;
+    if (waitForRelease) {
+      awaitingRelease = true;
+      resetDragFeedback();
+    } else {
+      cleanupDragState();
+    }
+    if (commit && active && shouldMove && gap >= 0 && (indices.length > 1 || from !== to)) {
+      options.onReorder(from, to, gap, indices);
+    }
+  };
+
+  /**
+   * 左键或触摸松开时提交排序，提前结束后只等待所有鼠标按键释放
+   * @param event - 鼠标或触摸结束事件
+   */
+  const handleEnd = (event: MouseEvent | TouchEvent): void => {
+    if ("button" in event && (awaitingRelease ? event.buttons !== 0 : event.button !== 0)) return;
+    finishDrag(true, false);
+  };
+
+  /**
+   * 拖拽中拦截右键，按设置取消、保持拖拽或立即提交排序
+   * @param event - 鼠标按下事件
+   */
+  const handleRightClick = (event: MouseEvent): void => {
+    if (event.button !== 2 || !isDragging.value) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const action = options.rightClickAction?.value ?? "cancel";
+    if (action === "keep") return;
+    finishDrag(action === "commit", true);
+  };
+
+  /**
+   * 取消拖拽并拦截尚未松开的鼠标手势，阻止 Escape 同时关闭弹层
+   * @param event - 键盘事件
+   */
+  const handleKeyDown = (event: KeyboardEvent): void => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    finishDrag(false, true);
+  };
+
+  /** 隐藏窗口时停止长按计时和动画 */
+  const handleVisibility = (): void => {
+    if (document.hidden) cleanupDragState();
+  };
+
+  /** 停止计时、动画和浮层，提前结束后继续等待鼠标松开 */
+  const resetDragFeedback = (): void => {
+    clearTimeout(timer);
+    timer = undefined;
+    if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
+    scrollFrame = undefined;
+    lastScrollTime = undefined;
+    scrollRemainder = 0;
     isDragging.value = false;
     draggedIndex.value = -1;
-    targetIndex.value = -1;
+    draggedIndices.value = [];
+    gapIndex = -1;
+    holdReady = false;
+    moved = false;
     dropIndicator.index = -1;
     dropIndicator.position = "none";
     dragLabelData.value = null;
-    window.removeEventListener("mousemove", handleDragMove);
-    window.removeEventListener("touchmove", handleDragMove);
-    window.removeEventListener("mouseup", handleDragEnd);
-    window.removeEventListener("touchend", handleDragEnd);
-    window.removeEventListener("mousemove", handleLongPressMove);
-    window.removeEventListener("touchmove", handleLongPressMove);
-    window.removeEventListener("mouseup", handleLongPressCancel);
-    window.removeEventListener("touchend", handleLongPressCancel);
   };
 
-  /** 根据指针 Y 坐标计算放置目标索引和指示线位置 */
-  const calculateTargetIndex = (clientY: number, overrideScrollTop?: number) => {
-    if (!listRect || !virtualListRef.value) return;
-    const currentScrollTop = overrideScrollTop ?? virtualListRef.value.getScrollTop();
-    const relativeY = clientY - listRect.top + currentScrollTop - paddingTop;
-    const dropInfo = virtualListRef.value.getDropInfoByOffset(relativeY);
-    let gapIndex = dropInfo.index;
-    if (dropInfo.position === "bottom") gapIndex += 1;
-    const maxGap = itemCount.value;
-    gapIndex = Math.max(0, Math.min(gapIndex, maxGap));
-    if (gapIndex === maxGap) {
-      dropIndicator.index = maxGap - 1;
-      dropIndicator.position = "bottom";
-    } else {
-      dropIndicator.index = gapIndex;
-      dropIndicator.position = "top";
-    }
-    let insertIndex = draggedIndex.value;
-    if (draggedIndex.value < gapIndex) {
-      insertIndex = gapIndex - 1;
-    } else if (draggedIndex.value > gapIndex) {
-      insertIndex = gapIndex;
-    }
-    targetIndex.value = Math.max(0, Math.min(insertIndex, maxGap - 1));
+  /** 结束本次手势并移除全部临时监听 */
+  const cleanupDragState = (): void => {
+    if (isDragging.value || awaitingRelease) suppressUntil = Date.now() + 400;
+    resetDragFeedback();
+    awaitingRelease = false;
+    window.removeEventListener("mousedown", handleRightClick, true);
+    window.removeEventListener("contextmenu", suppressClick, true);
+    window.removeEventListener("mousemove", handleMove);
+    window.removeEventListener("touchmove", handleMove);
+    window.removeEventListener("mouseup", handleEnd, true);
+    window.removeEventListener("touchend", handleEnd);
+    window.removeEventListener("touchcancel", cleanupDragState);
+    window.removeEventListener("blur", cleanupDragState);
+    window.removeEventListener("keydown", handleKeyDown, true);
+    document.removeEventListener("visibilitychange", handleVisibility);
   };
 
-  /** 更新拖拽标签跟随指针位置 */
-  const updateDragLabelPosition = (event: MouseEvent | TouchEvent) => {
-    const { x, y } = getPointerPos(event);
-    dragLabelPosition.left = x;
-    dragLabelPosition.top = y;
+  /** 列表变化时取消拖拽，保留右键提交或取消后尚未结束的按键拦截 */
+  const cancelDrag = (): void => {
+    if (isDragging.value || awaitingRelease) finishDrag(false, true);
+    else cleanupDragState();
   };
 
-  /** 检测指针是否靠近列表边缘，触发或停止自动滚动 */
-  const handleAutoScroll = (clientY: number, rect: DOMRect) => {
-    const edgeThreshold = 40;
-    const scrollSpeed = 12;
-    if (clientY < rect.top + edgeThreshold) {
-      startAutoScroll(-scrollSpeed);
-    } else if (clientY > rect.bottom - edgeThreshold) {
-      startAutoScroll(scrollSpeed);
-    } else {
-      stopAutoScroll();
-    }
+  /**
+   * 在捕获阶段拦截拖拽生成的点击和双击
+   * @param event - 点击或上下文菜单事件
+   */
+  const suppressClick = (event: Event): void => {
+    if (!isDragging.value && !awaitingRelease && Date.now() >= suppressUntil) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
   };
 
-  /** 启动 RAF 驱动的自动滚动循环 */
-  const startAutoScroll = (amount: number) => {
-    if (autoScrollRafId !== null) return;
-    let expectedScroll = virtualListRef.value?.getScrollTop() || 0;
-    const scrollStep = () => {
-      if (!isDragging.value) return stopAutoScroll();
-      const actualScroll = virtualListRef.value?.getScrollTop() || 0;
-      if (Math.abs(actualScroll - expectedScroll) > Math.abs(amount) * 3) {
-        expectedScroll = actualScroll;
-      }
-      expectedScroll = Math.max(0, expectedScroll + amount);
-      virtualListRef.value?.scrollTo(expectedScroll, "auto");
-      const wrapper = virtualListRef.value?.wrapperRef;
-      if (wrapper) listRect = wrapper.getBoundingClientRect();
-      calculateTargetIndex(dragLabelPosition.top, expectedScroll);
-      autoScrollRafId = requestAnimationFrame(scrollStep);
-    };
-    autoScrollRafId = requestAnimationFrame(scrollStep);
-  };
-
-  /** 停止自动滚动 */
-  const stopAutoScroll = () => {
-    if (autoScrollRafId !== null) {
-      cancelAnimationFrame(autoScrollRafId);
-      autoScrollRafId = null;
-    }
-  };
-
-  /** 取消长按计时器 */
-  const cancelLongPress = () => {
-    if (longPressTimer !== null) {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
-    }
-  };
-
-  /** 长按等待期间检测手指移动，超过阈值则取消 */
-  const handleLongPressMove = (event: MouseEvent | TouchEvent) => {
-    const { x, y } = getPointerPos(event);
-    if (Math.sqrt((x - pointerStartX) ** 2 + (y - pointerStartY) ** 2) > MOVE_THRESHOLD) {
-      cancelLongPress();
-      window.removeEventListener("mousemove", handleLongPressMove);
-      window.removeEventListener("touchmove", handleLongPressMove);
-      window.removeEventListener("mouseup", handleLongPressCancel);
-      window.removeEventListener("touchend", handleLongPressCancel);
-    }
-  };
-
-  /** 长按等待期间释放指针，取消长按 */
-  const handleLongPressCancel = () => {
-    cancelLongPress();
-    window.removeEventListener("mousemove", handleLongPressMove);
-    window.removeEventListener("touchmove", handleLongPressMove);
-    window.removeEventListener("mouseup", handleLongPressCancel);
-    window.removeEventListener("touchend", handleLongPressCancel);
-  };
-
-  /** 统一入口：handle 模式立即激活，longpress 模式延迟激活 */
-  const handlePointerDown = (event: MouseEvent | TouchEvent, index: number, labelText: string) => {
-    if (triggerMode === "handle") {
-      activateDrag(event, index, labelText);
-      return;
-    }
-    const { x, y } = getPointerPos(event);
-    pointerStartX = x;
-    pointerStartY = y;
-    pendingIndex = index;
-    pendingLabelText = labelText;
-    cancelLongPress();
-    longPressTimer = setTimeout(() => {
-      longPressTimer = null;
-      navigator.vibrate?.(50);
-      activateDrag(event, pendingIndex, pendingLabelText);
-      window.removeEventListener("mousemove", handleLongPressMove);
-      window.removeEventListener("touchmove", handleLongPressMove);
-      window.removeEventListener("mouseup", handleLongPressCancel);
-      window.removeEventListener("touchend", handleLongPressCancel);
-    }, longPressDelay);
-    window.addEventListener("mousemove", handleLongPressMove);
-    window.addEventListener("touchmove", handleLongPressMove, { passive: false });
-    window.addEventListener("mouseup", handleLongPressCancel);
-    window.addEventListener("touchend", handleLongPressCancel);
-  };
-
-  onUnmounted(() => {
+  /**
+   * 等待长按与移动共同触发拖动，跳过行内按钮和链接
+   * @param event - 行按下事件
+   * @param index - 行索引
+   * @param track - 浮层所需的歌曲名、缩略封面和歌手
+   */
+  const handlePointerDown = (
+    event: MouseEvent | TouchEvent,
+    index: number,
+    track: { title: string; cover?: string; artists: Artist[] | string },
+  ): void => {
+    if (awaitingRelease) return;
+    if (options.enabled?.value === false || itemCount.value < 2) return;
+    if ("button" in event && event.button !== 0) return;
+    if ("touches" in event && event.touches.length !== 1) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("button, a, input, [role='checkbox'], [data-no-drag]")) return;
     cleanupDragState();
-  });
+    suppressUntil = 0;
+    const point = "touches" in event ? event.touches[0] : event;
+    startX = point.clientX;
+    startY = point.clientY;
+    dragLabelPosition.left = startX;
+    dragLabelPosition.top = startY;
+    draggedIndex.value = index;
+    dragLabelData.value = {
+      title: track.title,
+      cover: track.cover,
+      artists:
+        typeof track.artists === "string"
+          ? track.artists
+          : track.artists.map((artist) => artist.name).join(" / "),
+    };
+    if (options.triggerMode === "longpress") {
+      timer = setTimeout(() => {
+        timer = undefined;
+        holdReady = true;
+        if (Math.hypot(dragLabelPosition.left - startX, dragLabelPosition.top - startY) > 5) {
+          activateDrag();
+        }
+      }, 250);
+    } else {
+      if (event.cancelable) event.preventDefault();
+      activateDrag();
+    }
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mousedown", handleRightClick, true);
+    window.addEventListener("contextmenu", suppressClick, true);
+    window.addEventListener("touchmove", handleMove, { passive: false });
+    window.addEventListener("mouseup", handleEnd, true);
+    window.addEventListener("touchend", handleEnd);
+    window.addEventListener("touchcancel", cleanupDragState);
+    window.addEventListener("blur", cleanupDragState);
+    window.addEventListener("keydown", handleKeyDown, true);
+    document.addEventListener("visibilitychange", handleVisibility);
+  };
+
+  watch(itemCount, cancelDrag);
+  if (options.enabled) watch(options.enabled, cancelDrag);
+  onDeactivated(cleanupDragState);
+  onUnmounted(cleanupDragState);
 
   return {
     isDragging,
     draggedIndex,
+    draggedIndices,
     dropIndicator,
     dragLabelData,
     dragLabelPosition,
     handlePointerDown,
-    cleanupDragState,
+    suppressClick,
+    cancelDrag,
   };
 };

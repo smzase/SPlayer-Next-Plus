@@ -2,6 +2,7 @@ import type { LyricFormat } from "lyric-kit";
 
 import { DEFAULT_LYRIC_FORMAT_ORDER as DEFAULT_LYRIC_FORMAT_ORDER_SHARED } from "@shared/types/lyrics";
 import type { Platform } from "@shared/types/platform";
+import type { DragRightClickAction } from "@shared/types/settings";
 import type { TransitionPreference } from "@shared/types/player";
 import { ALL_PLATFORMS } from "@shared/types/platform";
 import type { CjkTransformMode } from "@shared/types/opencc";
@@ -303,6 +304,8 @@ export interface AppearanceSettings {
   layoutMode: LayoutMode;
   /** 歌曲列表样式 */
   songListStyle: SongListStyle;
+  /** 拖拽歌曲时的右键行为 */
+  dragRightClickAction: DragRightClickAction;
   /** 路由切换动效 */
   routeTransition: RouteTransition;
   /** 页面之间的共享元素过渡 */

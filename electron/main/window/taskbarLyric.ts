@@ -154,6 +154,7 @@ export const getTaskbarPlaybackSnapshot = (): TaskbarPlaybackSnapshot =>
     currentTrackId: null,
     playMode: "repeat-list",
     playModeDisabled: true,
+    dragRightClickAction: "cancel",
     locale: getLocale(),
     theme: {
       isDark: true,

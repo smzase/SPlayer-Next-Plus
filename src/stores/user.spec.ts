@@ -43,6 +43,7 @@ describe("平台用户会话与喜欢列表", () => {
       song_detail: { code: 200, songs: [] },
       like_v1: { code: 200 },
       song_like: { code: 200 },
+      song_order_update: { code: 200 },
     };
     call.mockReset().mockImplementation(async (_platform, name) => ({
       ok: true,
@@ -158,6 +159,99 @@ describe("平台用户会话与喜欢列表", () => {
     expect(store.likedPlaylistTracks.map(({ id }) => id)).toEqual(["1"]);
     expect([...store.likedSongIds]).toEqual(["1", "2"]);
     expect(store.likedPlaylistLoading).toBe(false);
+  });
+
+  it("喜欢歌单排序立即生效，保留缺失详情的 ID 并保存新顺序到缓存", async () => {
+    const store = loggedInStore();
+    bodies.likelist = { code: 200, ids: [1, 2, 3] };
+    bodies.playlist_detail = {
+      code: 200,
+      playlist: {
+        ...playlist,
+        trackIds: [{ id: 1 }, { id: 2 }, { id: 3 }],
+        tracks: [song(3), song(1)],
+      },
+    };
+    await store.loadContent(1);
+    await store.ensureLikedPlaylist();
+    expect(store.likedPlaylistTracks.map(({ id }) => id)).toEqual(["1", "3"]);
+    cache.setItem.mockClear();
+
+    const saving = store.reorderLikedPlaylist([...store.likedPlaylistTracks].reverse());
+    expect(store.likedPlaylistTracks.map(({ id }) => id)).toEqual(["3", "1"]);
+    expect(store.likedPlaylistReordering).toBe(true);
+    await saving;
+
+    expect(call).toHaveBeenCalledWith("netease", "song_order_update", {
+      pid: "10",
+      ids: '["3","2","1"]',
+    });
+    expect(cache.setItem).toHaveBeenCalledWith(
+      "liked-playlist",
+      expect.objectContaining({
+        playlistId: "10",
+        trackIds: ["3", "2", "1"],
+        tracks: [expect.objectContaining({ id: "3" }), expect.objectContaining({ id: "1" })],
+      }),
+    );
+    expect([...store.likedSongIds]).toEqual(["1", "2", "3"]);
+    expect(store.likedPlaylistReordering).toBe(false);
+  });
+
+  it("喜欢歌单排序失败回退，且不把临时顺序写入缓存", async () => {
+    const store = loggedInStore();
+    bodies.playlist_detail = {
+      code: 200,
+      playlist: { ...playlist, trackIds: [{ id: 1 }, { id: 2 }], tracks: [song(1), song(2)] },
+    };
+    await store.loadContent(1);
+    await store.ensureLikedPlaylist();
+    bodies.song_order_update = { code: 500, msg: "同步失败" };
+    cache.setItem.mockClear();
+
+    await expect(
+      store.reorderLikedPlaylist([...store.likedPlaylistTracks].reverse()),
+    ).rejects.toThrow();
+
+    expect(store.likedPlaylistTracks.map(({ id }) => id)).toEqual(["1", "2"]);
+    expect(store.likedPlaylistReordering).toBe(false);
+    expect(cache.setItem).not.toHaveBeenCalled();
+  });
+
+  it("排序期间不发出红心或刷新请求，账号清空后旧响应不写入缓存", async () => {
+    const store = loggedInStore();
+    await store.loadContent(1);
+    await store.ensureLikedPlaylist();
+    let finish!: (value: unknown) => void;
+    const pending = new Promise((resolve) => {
+      finish = resolve;
+    });
+    const implementation = call.getMockImplementation()!;
+    call.mockImplementation((platform, name, params) =>
+      name === "song_order_update" ? pending : implementation(platform, name, params),
+    );
+    const saving = store.reorderLikedPlaylist([...store.likedPlaylistTracks]);
+    call.mockClear();
+    cache.setItem.mockClear();
+    await store.ensureLikedPlaylist(true);
+    expect(await store.toggleLike("1")).toBe(false);
+    expect(call).not.toHaveBeenCalled();
+    store.clearContent();
+    finish({ ok: true, status: 200, body: { code: 200 } });
+    await saving;
+    expect(store.likedPlaylistTracks).toEqual([]);
+    expect(store.likedPlaylistReordering).toBe(false);
+    expect(cache.setItem).not.toHaveBeenCalled();
+  });
+
+  it("拒绝用不完整的可见曲目覆盖喜欢歌单", async () => {
+    const store = loggedInStore();
+    await store.loadContent(1);
+    await store.ensureLikedPlaylist();
+    call.mockClear();
+    await expect(store.reorderLikedPlaylist([])).rejects.toThrow("歌单内容已变化");
+    expect(call).not.toHaveBeenCalled();
+    expect(store.likedPlaylistTracks.map(({ id }) => id)).toEqual(["1"]);
   });
 
   it("后台旧红心响应不会覆盖刚完成的操作", async () => {

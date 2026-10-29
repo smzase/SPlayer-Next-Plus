@@ -108,6 +108,7 @@ export const useSettingsStore = defineStore(
     const appearance = reactive<AppearanceSettings>({
       layoutMode: "default",
       songListStyle: "comfortable",
+      dragRightClickAction: "cancel",
       routeTransition: "fade",
       seamlessTransition: false,
       reduceMotion: false,
@@ -391,6 +392,25 @@ export const useSettingsStore = defineStore(
     persist: {
       storage: localStorage,
       omit: ["system"],
+      serializer: {
+        serialize: JSON.stringify,
+        /**
+         * 在合并默认值前迁移旧版拖拽右键开关
+         * @param value - 本地设置存档
+         * @returns 已迁移的设置，保留用户保存的三选一行为
+         */
+        deserialize: (value: string) => {
+          const state = JSON.parse(value) as {
+            appearance?: Partial<AppearanceSettings> & { cancelDragOnRightClick?: boolean };
+          };
+          if (state.appearance) {
+            state.appearance.dragRightClickAction ??=
+              state.appearance.cancelDragOnRightClick === false ? "keep" : "cancel";
+            delete state.appearance.cancelDragOnRightClick;
+          }
+          return state;
+        },
+      },
       afterHydrate: ({ store }) => {
         const { lyric, appearance, preset, player } = store as unknown as {
           lyric: LyricSettings;

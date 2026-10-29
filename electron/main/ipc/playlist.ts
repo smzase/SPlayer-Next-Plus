@@ -13,6 +13,7 @@ import {
   getPlaylists,
   importLegacyPlaylists,
   removePlaylistTracks,
+  reorderPlaylistTracks,
   updatePlaylist,
 } from "@main/database/playlists";
 /** 注册统一歌单 IPC */
@@ -29,6 +30,9 @@ export const registerPlaylistIpc = (): void => {
   );
   ipcMain.handle("playlist:removeTracks", (_event, id: string, trackIds: string[]) =>
     removePlaylistTracks(id, trackIds),
+  );
+  ipcMain.handle("playlist:reorderTracks", (_event, id: string, trackIds: string[]) =>
+    reorderPlaylistTracks(id, trackIds),
   );
   ipcMain.handle("playlist:importLegacy", (_event, records: LegacyPlaylistRecord[]) =>
     importLegacyPlaylists(records),

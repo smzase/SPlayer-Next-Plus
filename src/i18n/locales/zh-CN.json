@@ -790,6 +790,9 @@
     }
   },
   "songList": {
+    "reorder": {
+      "failed": "顺序同步失败，请刷新后重试"
+    },
     "title": "标题",
     "album": "专辑",
     "podcast": "播客",
@@ -1116,6 +1119,7 @@
       "mcp": "MCP",
       "aiModel": "AI 模型",
       "systemConfig": "系统配置",
+      "listInteraction": "列表交互",
       "pluginManage": "导入插件",
       "pluginsList": "插件管理",
       "streaming": "媒体源配置",
@@ -2339,6 +2343,13 @@
       "notSupported": "暂不支持",
       "injected": "已配置",
       "injectSuccess": "配置成功"
+    },
+    "dragRightClickAction": {
+      "label": "拖拽时右键行为",
+      "description": "拖拽歌曲时，右键可取消并保留原顺序、保持拖拽，或立即提交当前位置的排序，适用于歌单和播放列表",
+      "cancel": "右键取消",
+      "keep": "保持拖拽",
+      "commit": "右键更改"
     },
     "closeAction": {
       "label": "关闭按钮行为",

@@ -6,6 +6,12 @@ import { fetchPodcastDetail, fetchPodcastPrograms } from "@/apis/podcast/netease
 import { withPicSize } from "@/utils/format/netease";
 import type { LoadCollectionOptions } from "./types";
 
+/**
+ * 渐进加载网易云合集并保留服务端歌曲顺序
+ * @param type - 合集类型
+ * @param id - 合集 ID
+ * @param options - 更新回调与取消信号
+ */
 export const loadNeteaseCollection = async (
   type: CollectionType,
   id: string,
@@ -79,6 +85,7 @@ export const loadNeteaseCollection = async (
   }
 
   const tracks: Track[] = [];
+  let trackIds: string[] = [];
   let meta: {
     name: string;
     cover?: string;
@@ -87,6 +94,7 @@ export const loadNeteaseCollection = async (
     creatorId?: number;
     count?: number;
   };
+  /** 生成当前已加载歌曲的有序快照 */
   const current = (): Collection | null =>
     meta
       ? {
@@ -99,11 +107,15 @@ export const loadNeteaseCollection = async (
           creator: meta.creator,
           creatorId: meta.creatorId,
           tracks: [...tracks],
+          trackIds,
           trackCount: meta.count ?? tracks.length,
         }
       : null;
   await fetchPlaylist(id, {
     signal: options.signal,
+    onTrackIds: (ids) => {
+      trackIds = ids;
+    },
     onMeta: (value) => {
       meta = {
         name: value.name,
@@ -117,6 +129,8 @@ export const loadNeteaseCollection = async (
     },
     onBatch: (batch) => {
       tracks.push(...batch);
+      const order = new Map(trackIds.map((trackId, index) => [trackId, index]));
+      tracks.sort((a, b) => (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity));
       if (!options.signal?.aborted) options.onUpdate(current());
     },
   });

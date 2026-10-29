@@ -11,6 +11,10 @@ import { usePlaylistManage } from "@/composables/collection/usePlaylistManage";
 import { useCopyText } from "@/composables/useCopyText";
 import { toast } from "@/composables/useToast";
 import { useStatusStore } from "@/stores/status";
+import { usePlaylistStore } from "@/stores/playlist";
+import { useUserStore } from "@/stores/user";
+import { reorderVisibleIds } from "@shared/utils/reorder";
+import { reorderPlaylistTracks } from "@/apis/playlist/netease";
 import SongList from "@/components/list/SongList.vue";
 import { formatTime } from "@/utils/time";
 import { getCollectionShareUrl } from "@/utils/format/shareUrl";
@@ -57,6 +61,42 @@ const coverSource = computed(() =>
 );
 /** 正在加载 */
 const loading = ref(false);
+const reordering = ref(false);
+const playlistStore = usePlaylistStore();
+const userStore = useUserStore();
+
+/**
+ * 立即展示新顺序并同步歌单，失败时恢复本次变更
+ * @param tracks - 拖拽后的全部可见歌曲
+ */
+const handleTracksReordered = async (tracks: Track[]): Promise<void> => {
+  const before = collection.value;
+  if (!before || loading.value || loadError.value || reordering.value || !manage.canReorder.value)
+    return;
+  reordering.value = true;
+  try {
+    const visibleIds = before.tracks.map((track) => track.id);
+    const trackIds = reorderVisibleIds(
+      before.trackIds ?? visibleIds,
+      visibleIds,
+      tracks.map((track) => track.id),
+    );
+    collection.value = { ...before, tracks, trackIds };
+    if (before.source === "local") await playlistStore.reorderTracks(before.id, trackIds);
+    else {
+      await reorderPlaylistTracks(before.id, trackIds);
+      if (before.id === userStore.likedPlaylistId) void userStore.ensureLikedPlaylist(true);
+    }
+  } catch (error) {
+    if (collection.value?.tracks === tracks) {
+      collection.value = { ...collection.value, tracks: before.tracks, trackIds: before.trackIds };
+    }
+    console.error("[collection] reorder tracks failed", error);
+    toast.error(t("songList.reorder.failed"));
+  } finally {
+    reordering.value = false;
+  }
+};
 const loadError = ref("");
 const podcastHasMore = ref(false);
 const podcastLoadingMore = ref(false);
@@ -304,7 +344,7 @@ const displayedTracks = computed(() => {
 
 /**
  * 乐观过滤本地 tracks
- * @param removedIds 已成功删除的曲目 id 列表
+ * @param removedIds - 已成功删除的曲目 ID 列表
  */
 const handleTracksRemoved = (removedIds: string[]): void => {
   if (!collection.value || removedIds.length === 0) return;
@@ -313,6 +353,7 @@ const handleTracksRemoved = (removedIds: string[]): void => {
   collection.value = {
     ...collection.value,
     tracks,
+    trackIds: collection.value.trackIds?.filter((trackId) => !removed.has(trackId)),
     trackCount: tracks.length,
   };
 };
@@ -720,7 +761,9 @@ onBeforeUnmount(() => {
           :collection-type="type"
           :collection-id="id"
           :playback-context="playbackContext"
-          :can-remove="manage.canManage.value"
+          :can-remove="manage.canManage.value && !reordering"
+          :can-reorder="manage.canReorder.value && !loading && !loadError"
+          :reordering="reordering"
           :has-more="type === 'radio' && !searchQuery.trim() && podcastHasMore"
           :loading-more="
             type === 'radio' && (searchQuery.trim() ? podcastSearchLoading : podcastLoadingMore)
@@ -730,6 +773,7 @@ onBeforeUnmount(() => {
           @scroll="handleListScroll"
           @reach-bottom="loadMorePodcastPrograms"
           @change="handleTracksRemoved"
+          @reorder="handleTracksReordered"
         />
       </div>
       <!-- 加载中 -->

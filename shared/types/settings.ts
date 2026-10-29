@@ -5,6 +5,9 @@ import type { DownloadLyricFormat, DownloadFolderScheme } from "./download";
 /** 支持的语言代码 */
 export type LocaleCode = "zh-CN" | "en-US";
 
+/** 拖拽中按右键时取消、保持拖拽或提交排序 */
+export type DragRightClickAction = "cancel" | "keep" | "commit";
+
 /** 语言选项 */
 export const LOCALES: { value: LocaleCode; label: string }[] = [
   { value: "zh-CN", label: "简体中文" },

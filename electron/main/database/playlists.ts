@@ -228,6 +228,38 @@ export const removePlaylistTracks = (id: string, trackIds: string[]): number => 
 };
 
 /**
+ * 原子保存歌单顺序，拒绝过期列表覆盖新增或已移除的歌曲
+ * @param id - 本地歌单 ID
+ * @param trackIds - 包含全部歌曲的新顺序
+ * @returns 更新后的歌单摘要
+ */
+export const reorderPlaylistTracks = (id: string, trackIds: string[]): PlaylistSummary => {
+  const database = getDb();
+  return database.transaction(() => {
+    const playlist = getPlaylists().find((item) => item.id === id);
+    if (!playlist) throw new Error("歌单不存在");
+    const current = database
+      .prepare("SELECT track_id FROM playlist_tracks WHERE playlist_id = ?")
+      .all(id) as { track_id: string }[];
+    const ids = new Set(trackIds);
+    if (
+      ids.size !== trackIds.length ||
+      current.length !== ids.size ||
+      current.some((item) => !ids.has(item.track_id))
+    ) {
+      throw new Error("歌单内容已变化，请刷新后重试");
+    }
+    const update = database.prepare(
+      "UPDATE playlist_tracks SET position = ? WHERE playlist_id = ? AND track_id = ?",
+    );
+    trackIds.forEach((trackId, position) => update.run(position, id, trackId));
+    const updateTime = Date.now();
+    database.prepare("UPDATE playlists SET updated_at = ? WHERE id = ?").run(updateTime, id);
+    return { ...playlist, updateTime };
+  })();
+};
+
+/**
  * 导入旧版 renderer 本地歌单
  * @param records - IndexedDB 歌单记录
  */

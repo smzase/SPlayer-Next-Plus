@@ -4,6 +4,7 @@ import type { AlbumSummary, ArtistSummary, ScanProgress } from "@shared/types/li
 import type { Collection } from "@/types/collection";
 import type { ArtistProfile, CoverItem } from "@/types/artist";
 import { buildFolderTree, countFolders } from "@/utils/folderTree";
+import { reorderVisibleIds } from "@shared/utils/reorder";
 
 const trackDb = localforage.createInstance({ name: "splayer", storeName: "library" });
 
@@ -27,6 +28,32 @@ export const useLibraryStore = defineStore("library", () => {
   const likedOrderedIds = shallowRef<string[]>([]);
   /** 本地红心 id 集合 */
   const likedIdSet = shallowRef<Set<string>>(new Set());
+  const likedReordering = ref(false);
+
+  /**
+   * 立即调整本地喜欢歌曲顺序并保存，写入失败时恢复未被后续操作修改的状态
+   * @param trackIds - 排序后的全部可见歌曲 ID
+   */
+  const reorderLikedTracks = async (trackIds: string[]): Promise<void> => {
+    if (likedReordering.value) return;
+    const before = likedOrderedIds.value;
+    const available = new Set(tracks.value.map((track) => track.id));
+    const next = reorderVisibleIds(
+      before,
+      before.filter((id) => available.has(id)),
+      trackIds,
+    );
+    likedOrderedIds.value = next;
+    likedReordering.value = true;
+    try {
+      await trackDb.setItem(LIKED_IDS_KEY, [...next]);
+    } catch (error) {
+      if (likedOrderedIds.value === next) likedOrderedIds.value = before;
+      throw error;
+    } finally {
+      likedReordering.value = false;
+    }
+  };
 
   /** 持久化喜欢列表 */
   const persistLiked = (): void => {
@@ -343,6 +370,8 @@ export const useLibraryStore = defineStore("library", () => {
     initialized,
     artistAvatars,
     likedOrderedIds,
+    likedReordering,
+    reorderLikedTracks,
     likedIdSet,
     isLiked,
     toggleLike,

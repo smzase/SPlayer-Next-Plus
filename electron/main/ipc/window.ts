@@ -180,6 +180,15 @@ export const registerWindowIpc = (onStartupComplete: () => void): void => {
       if (event.sender !== getTaskbarQueueWindow()?.webContents) return;
       sendToMain("player:event", { type: "clearPlaybackQueue" });
     });
+    ipcMain.on("taskbarLyric:moveTrack", (event, trackId: string, beforeTrackId: string | null) => {
+      if (
+        event.sender !== getTaskbarQueueWindow()?.webContents ||
+        typeof trackId !== "string" ||
+        (beforeTrackId !== null && typeof beforeTrackId !== "string")
+      )
+        return;
+      sendToMain("player:event", { type: "moveQueueTrack", data: { trackId, beforeTrackId } });
+    });
     ipcMain.on("taskbarLyric:cyclePlayMode", (event) => {
       if (event.sender !== getTaskbarLyricWindow()?.webContents) return;
       sendToMain("player:event", { type: "cycleTaskbarPlayMode" });

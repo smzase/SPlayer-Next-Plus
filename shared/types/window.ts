@@ -117,6 +117,8 @@ export interface TaskbarLyricApi {
   playTrack: (trackId: string) => void;
   /** 移除播放队列中的指定歌曲 */
   removeTrack: (index: number) => void;
+  /** 按歌曲身份移动到另一首歌曲之前，null 表示队尾 */
+  moveTrack: (trackId: string, beforeTrackId: string | null) => void;
   /** 清空播放队列 */
   clearQueue: () => void;
   /** 循环切换任务栏四态播放模式 */

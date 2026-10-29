@@ -1,4 +1,5 @@
 import localforage from "localforage";
+import { moveItemsToGap } from "@shared/utils/reorder";
 import type { PlaybackContext, PlaybackQueueItem, Track } from "@shared/types/player";
 
 /** 持久化存储实例 */
@@ -200,13 +201,15 @@ export const removeFromQueue = (index: number): void => {
  * @param toIndex - 目标位置
  */
 export const moveInQueue = (fromIndex: number, toIndex: number): void => {
+  if (!Number.isInteger(fromIndex) || !Number.isInteger(toIndex)) return;
   if (fromIndex === toIndex) return;
   if (fromIndex < 0 || fromIndex >= queueEntries.value.length) return;
   if (toIndex < 0 || toIndex >= queueEntries.value.length) return;
-  const next = [...queueEntries.value];
-  const [item] = next.splice(fromIndex, 1);
-  next.splice(toIndex, 0, item);
-  queueEntries.value = next;
+  queueEntries.value = moveItemsToGap(
+    queueEntries.value,
+    [fromIndex],
+    toIndex > fromIndex ? toIndex + 1 : toIndex,
+  );
   save();
 };
 

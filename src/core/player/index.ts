@@ -1436,6 +1436,17 @@ export const playFiles = async (filePaths: string[]): Promise<void> => {
  * @param toIndex - 目标位置
  */
 export const moveInQueue = (fromIndex: number, toIndex: number): void => {
+  const length = queue.queueEntries.value.length;
+  if (
+    !Number.isInteger(fromIndex) ||
+    !Number.isInteger(toIndex) ||
+    fromIndex === toIndex ||
+    fromIndex < 0 ||
+    toIndex < 0 ||
+    fromIndex >= length ||
+    toIndex >= length
+  )
+    return;
   const status = useStatusStore();
   queue.moveInQueue(fromIndex, toIndex);
   // 根据移动方向调整 playIndex
@@ -1469,6 +1480,7 @@ export const initPlayer = async (): Promise<void> => {
   if (navigator.platform.startsWith("Win")) {
     const taskbarMedia = useMediaStore();
     const theme = useThemeStore();
+    /** 同步任务栏播放列表、交互偏好和主题 */
     const pushTaskbarPlayback = (): void => {
       const rootStyle = getComputedStyle(document.documentElement);
       const snapshot: TaskbarPlaybackSnapshot = {
@@ -1485,6 +1497,7 @@ export const initPlayer = async (): Promise<void> => {
           status.taskbarSequentialMode,
         ),
         playModeDisabled: status.fmMode,
+        dragRightClickAction: settings.appearance.dragRightClickAction,
         locale: settings.locale,
         theme: {
           isDark: theme.isDark,
@@ -1521,6 +1534,7 @@ export const initPlayer = async (): Promise<void> => {
         () => status.taskbarSequentialMode,
         () => status.fmMode,
         () => settings.locale,
+        () => settings.appearance.dragRightClickAction,
         () => theme.isDark,
         () => theme.source,
         () => theme.customColor,

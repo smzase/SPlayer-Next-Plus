@@ -791,6 +791,9 @@
     }
   },
   "songList": {
+    "reorder": {
+      "failed": "Could not sync song order. Refresh and try again"
+    },
     "title": "Title",
     "album": "Album",
     "podcast": "Podcast",
@@ -1117,6 +1120,7 @@
       "mcp": "MCP",
       "aiModel": "AI Models",
       "systemConfig": "System",
+      "listInteraction": "List Interaction",
       "pluginManage": "Import Plugins",
       "pluginsList": "Plugin Management",
       "streaming": "Media Source Config",
@@ -2340,6 +2344,13 @@
       "notSupported": "Not supported yet",
       "injected": "Configured",
       "injectSuccess": "Configured successfully"
+    },
+    "dragRightClickAction": {
+      "label": "Right-click During Dragging",
+      "description": "Choose whether right-click cancels and preserves the original order, keeps dragging, or immediately applies the new position in playlists and queues",
+      "cancel": "Cancel Dragging",
+      "keep": "Keep Dragging",
+      "commit": "Apply Reorder"
     },
     "closeAction": {
       "label": "Close Button Action",

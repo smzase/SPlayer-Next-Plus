@@ -271,6 +271,7 @@ export type PlayerEvent =
   | { type: "playQueueTrack"; data: { trackId: string } }
   | { type: "removeQueueTrack"; data: { index: number } }
   | { type: "clearPlaybackQueue" }
+  | { type: "moveQueueTrack"; data: { trackId: string; beforeTrackId: string | null } }
   | { type: "cycleTaskbarPlayMode" }
   | { type: "getQueue"; data: { requestId: string; offset: number; limit: number } }
   | { type: "addToQueue"; data: { tracks: Track[]; position: "next" | "end" } }

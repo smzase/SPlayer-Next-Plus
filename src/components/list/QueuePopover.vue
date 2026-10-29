@@ -3,11 +3,13 @@ import type { Track } from "@shared/types/player";
 import type { SVirtualListExposed } from "@/components/ui/SVirtualList.vue";
 import { useQueuePanel } from "@/composables/useQueuePanel";
 import { useDragSort } from "@/composables/useDragSort";
+import { useSettingsStore } from "@/stores/settings";
 import * as player from "@/core/player";
 
 const emit = defineEmits<{ close: [] }>();
 
 const { t } = useI18n();
+const settings = useSettingsStore();
 const listRef = shallowRef<SVirtualListExposed | null>(null);
 const {
   statusStore,
@@ -28,12 +30,17 @@ const {
   dragLabelData,
   dragLabelPosition,
   handlePointerDown,
+  suppressClick,
+  cancelDrag,
 } = useDragSort({
   virtualListRef: listRef,
   itemCount: queueLength,
+  rightClickAction: computed(() => settings.appearance.dragRightClickAction),
   onReorder: (from, to) => player.moveInQueue(from, to),
   triggerMode: "longpress",
 });
+
+watch(queue, cancelDrag);
 
 /** 点歌后关闭弹层 */
 const onPlay = (index: number): void => {
@@ -49,7 +56,13 @@ const onClear = (): void => {
 </script>
 
 <template>
-  <div class="flex flex-col h-full">
+  <div
+    class="flex flex-col h-full select-none"
+    @click.capture="suppressClick"
+    @dblclick.capture="suppressClick"
+    @contextmenu.capture="suppressClick"
+    @dragstart.prevent
+  >
     <div
       class="shrink-0 flex items-start justify-between gap-2 px-3 pt-3.5 pb-2.5 border-b border-b-solid border-b-on-surface/8"
     >
@@ -116,8 +129,8 @@ const onClear = (): void => {
                 isDragging && draggedIndex === index ? 'opacity-30' : 'opacity-100',
               ]"
               @click="onPlay(index)"
-              @mousedown="handlePointerDown($event, index, item.title)"
-              @touchstart.passive="handlePointerDown($event, index, item.title)"
+              @mousedown="handlePointerDown($event, index, item)"
+              @touchstart.passive="handlePointerDown($event, index, item)"
             >
               <SImg :src="item.cover" class="size-9 rounded shrink-0" />
               <div class="flex-1 min-w-0">
@@ -174,16 +187,12 @@ const onClear = (): void => {
         leave-active-class="transition-opacity duration-200"
         leave-to-class="opacity-0"
       >
-        <div
+        <DragSortPreview
           v-if="isDragging && dragLabelData"
-          class="fixed z-9999 pointer-events-none max-w-60 truncate px-4 py-2 rounded-full text-sm font-medium shadow-lg bg-surface-bright text-on-surface"
-          :style="{
-            top: `${dragLabelPosition.top + 12}px`,
-            left: `${dragLabelPosition.left + 12}px`,
-          }"
-        >
-          {{ dragLabelData.name }}
-        </div>
+          :track="dragLabelData"
+          :position="dragLabelPosition"
+          compact
+        />
       </Transition>
     </Teleport>
   </div>
