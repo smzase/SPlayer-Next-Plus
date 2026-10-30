@@ -281,6 +281,7 @@ const appearanceCategory: SettingCategory = {
                 { value: "mesh", labelKey: "settings.playerBgRenderer.mesh" },
                 { value: "isolation", labelKey: "settings.playerBgRenderer.isolation" },
                 { value: "pixi", labelKey: "settings.playerBgRenderer.pixi" },
+                { value: "titanium", labelKey: "settings.playerBgRenderer.titanium" },
               ],
               defaultValue: "mesh",
             },
@@ -324,7 +325,8 @@ const appearanceCategory: SettingCategory = {
               key: "playerBgBeat",
               type: "switch",
               binding: { store: "settings", path: "player.playerBgBeat" },
-              visible: () => useSettingsStore().player.playerBgRenderer === "mesh",
+              visible: () =>
+                ["mesh", "titanium"].includes(useSettingsStore().player.playerBgRenderer),
               defaultValue: false,
             },
           ],

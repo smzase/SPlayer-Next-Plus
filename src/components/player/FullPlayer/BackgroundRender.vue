@@ -11,11 +11,13 @@ import type { PlayerBgRenderer } from "@/types/settings";
 import { getFftFrame } from "@/services/playback";
 import { acquireFft, releaseFft } from "@/services/fftCapture";
 import { getBassPulse, toAmllLowFreqVolume } from "@/services/audioFeatures";
+import { TitaniumRenderer } from "./background/titanium";
 
 const RENDERER_MAP: Record<PlayerBgRenderer, new (canvas: HTMLCanvasElement) => BaseRenderer> = {
   mesh: MeshGradientRenderer,
   isolation: IsolationRenderer,
   pixi: PixiRenderer,
+  titanium: TitaniumRenderer,
 };
 
 export interface BackgroundRenderProps {
@@ -23,6 +25,10 @@ export interface BackgroundRenderProps {
   album?: string;
   /** 是否处于播放状态，默认为 true */
   playing?: boolean;
+  /** 是否可见，隐藏时暂停渲染与 FFT */
+  visible?: boolean;
+  /** 形变期间持续提供实时帧，暂停播放时仍保持零流速 */
+  transitioning?: boolean;
   /** 动画流动速度，默认为 2 */
   flowSpeed?: number;
   /** 是否有歌词，默认为 true */
@@ -41,6 +47,8 @@ export interface BackgroundRenderProps {
 
 const props = withDefaults(defineProps<BackgroundRenderProps>(), {
   playing: true,
+  visible: true,
+  transitioning: false,
   flowSpeed: 2,
   hasLyric: true,
   fps: 30,
@@ -49,12 +57,58 @@ const props = withDefaults(defineProps<BackgroundRenderProps>(), {
   renderEngine: "mesh",
 });
 
-const emit = defineEmits<{ ready: [] }>();
+const emit = defineEmits<{ ready: []; error: [error: unknown] }>();
 
 const wrapperRef = ref<HTMLDivElement | null>(null);
 
 // 外部渲染器实例引用
 const bgRenderRef = shallowRef<AbstractBaseRenderer>();
+let albumRequestId = 0;
+let readyFrame = 0;
+let readyPending = false;
+let readyRemaining = 0;
+let previousReadyTime: number | undefined;
+
+/**
+ * 等待可见帧完成初始化，Pixi 需先完成内部的纹理显现动画
+ * @param time - 当前动画帧的时间戳
+ */
+const waitUntilReady = (time: number): void => {
+  readyFrame = 0;
+  if (!props.visible || !readyPending) return;
+  if (previousReadyTime !== undefined) readyRemaining -= time - previousReadyTime;
+  previousReadyTime = time;
+  if (readyRemaining <= 0) {
+    readyPending = false;
+    emit("ready");
+  } else {
+    readyFrame = requestAnimationFrame(waitUntilReady);
+  }
+};
+
+/** 加载当前封面，忽略过期任务并在首帧完成后通知父组件 */
+const loadAlbum = async (): Promise<void> => {
+  const renderer = bgRenderRef.value;
+  if (!renderer) return;
+  const requestId = ++albumRequestId;
+  cancelAnimationFrame(readyFrame);
+  readyFrame = 0;
+  readyPending = false;
+  previousReadyTime = undefined;
+  try {
+    await renderer.setAlbum(props.album ?? "", false);
+    if (requestId !== albumRequestId || bgRenderRef.value !== renderer) return;
+    // Pixi 加载纹理会重启 ticker，隐藏状态下需要再次暂停
+    if (!props.visible) renderer.pause();
+    readyPending = true;
+    readyRemaining = props.renderEngine === "pixi" ? 1100 : 2000 / props.fps;
+    if (props.visible) readyFrame = requestAnimationFrame(waitUntilReady);
+  } catch (error) {
+    if (requestId !== albumRequestId || bgRenderRef.value !== renderer) return;
+    console.warn("[background] 背景封面加载失败", error);
+    emit("error", error);
+  }
+};
 
 /**
  * 统一同步更新属性状态到底层渲染器
@@ -63,22 +117,11 @@ const updateRendererState = () => {
   const renderer = bgRenderRef.value;
   if (!renderer) return;
 
-  if (props.album) {
-    renderer.setAlbum(props.album, false).then(
-      async () => {
-        // 缓存纹理也要留出首帧，保证淡入起始状态已经绘制
-        await new Promise<void>((resolve) =>
-          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-        );
-        if (bgRenderRef.value === renderer) emit("ready");
-      },
-      (error) => console.warn("[background] 背景封面加载失败", error),
-    );
-  }
   renderer.setFPS(props.fps);
   renderer.setRenderScale(props.renderScale);
   renderer.setHasLyric(props.hasLyric);
   syncRendererMotion();
+  void loadAlbum();
 };
 
 /**
@@ -88,14 +131,17 @@ const syncRendererMotion = () => {
   const renderer = bgRenderRef.value;
   if (!renderer) return;
 
-  if (props.playing) {
-    renderer.setStaticMode(false);
-    renderer.setFlowSpeed(props.flowSpeed);
-    renderer.resume();
-  } else {
-    renderer.setFlowSpeed(0);
-    renderer.resume();
+  if (!props.visible) {
+    renderer.pause();
+    cancelAnimationFrame(readyFrame);
+    readyFrame = 0;
+    previousReadyTime = undefined;
+    return;
   }
+  renderer.setStaticMode(!props.playing && !props.transitioning);
+  renderer.setFlowSpeed(props.playing ? props.flowSpeed : 0);
+  renderer.resume();
+  if (readyPending && !readyFrame) readyFrame = requestAnimationFrame(waitUntilReady);
 };
 
 const BASS_ATTACK = 0.45;
@@ -118,7 +164,9 @@ const updateLowFreqVolume = () => {
   const smoothFactor = pulse > smoothedPulse ? BASS_ATTACK : BASS_DECAY;
   smoothedPulse = smoothedPulse + smoothFactor * (pulse - smoothedPulse);
 
-  bgRenderRef.value?.setLowFreqVolume(toAmllLowFreqVolume(smoothedPulse));
+  bgRenderRef.value?.setLowFreqVolume(
+    props.renderEngine === "titanium" ? smoothedPulse : toAmllLowFreqVolume(smoothedPulse),
+  );
 };
 
 const { resume: resumeFftLoop, pause: pauseFftLoop } = useRafFn(updateLowFreqVolume, {
@@ -154,18 +202,27 @@ const stopFftCapture = () => {
  * 按播放状态与跳动开关同步 FFT 采集
  */
 const syncFftCapture = () => {
-  if (props.playing && props.enableBeat) {
+  if (
+    props.visible &&
+    props.playing &&
+    props.enableBeat &&
+    (props.renderEngine === "mesh" || props.renderEngine === "titanium")
+  ) {
     startFftCapture();
   } else {
     stopFftCapture();
     if (!props.enableBeat) {
       smoothedPulse = 0;
       lastFftFrame = [[], []];
-      bgRenderRef.value?.setLowFreqVolume(1.0);
+      bgRenderRef.value?.setLowFreqVolume(props.renderEngine === "titanium" ? 0 : 1);
     }
   }
 };
 
+/**
+ * 解析自定义或设置中指定的渲染器
+ * @returns 用于创建画布的渲染器类
+ */
 const getRendererClass = () => {
   if (props.renderer) return props.renderer;
   return RENDERER_MAP[props.renderEngine ?? "mesh"] ?? MeshGradientRenderer;
@@ -178,7 +235,16 @@ const initRenderer = () => {
   if (!wrapperRef.value) return;
 
   const RendererClass = getRendererClass();
-  bgRenderRef.value = CoreBackgroundRender.new(RendererClass);
+  try {
+    if (RendererClass === TitaniumRenderer && !TitaniumRenderer.isSupported()) {
+      throw new Error("Titanium requires WebGL highp support");
+    }
+    bgRenderRef.value = CoreBackgroundRender.new(RendererClass);
+  } catch (error) {
+    console.warn("[background] 背景渲染器初始化失败", error);
+    emit("error", error);
+    return;
+  }
 
   const el = bgRenderRef.value.getElement();
   el.style.width = "100%";
@@ -194,6 +260,11 @@ const initRenderer = () => {
  * 释放渲染器资源并清空容器
  */
 const destroyRenderer = () => {
+  albumRequestId++;
+  cancelAnimationFrame(readyFrame);
+  readyFrame = 0;
+  readyPending = false;
+  previousReadyTime = undefined;
   stopFftCapture();
 
   const renderer = bgRenderRef.value;
@@ -214,7 +285,7 @@ onBeforeUnmount(() => {
   destroyRenderer();
 });
 
-// 监听渲染器引擎切换，平滑重建实例
+// 跨引擎过渡由父组件保留旧实例完成
 watch(
   () => [props.renderEngine, props.renderer],
   () => {
@@ -226,15 +297,11 @@ watch(
 // 属性变化监听
 watch(
   () => props.album,
-  (val) => {
-    if (val && bgRenderRef.value) {
-      bgRenderRef.value.setAlbum(val, false);
-    }
-  },
+  () => void loadAlbum(),
 );
 
 watch(
-  () => props.playing,
+  () => [props.playing, props.visible, props.transitioning],
   () => {
     syncRendererMotion();
     syncFftCapture();

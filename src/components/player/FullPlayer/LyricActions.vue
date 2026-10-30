@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { useMediaStore } from "@/stores/media";
 import { useStatusStore } from "@/stores/status";
+import { useSettingsStore } from "@/stores/settings";
+import { lyricPreferenceKey } from "@/stores/lyricPreference";
 import { useSettingsDialog } from "@/settings/useSettingsDialog";
 import { formatSignedSec } from "@/utils/time";
 import { clearCurrentLyricCache } from "@/services/lyric/loader";
@@ -14,6 +16,11 @@ defineProps<{
 const { t } = useI18n();
 const media = useMediaStore();
 const status = useStatusStore();
+const settings = useSettingsStore();
+const titaniumActive = computed(
+  () =>
+    settings.player.playerBgType === "animation" && settings.player.playerBgRenderer === "titanium",
+);
 const settingsDialog = useSettingsDialog();
 
 /** 歌词偏移步长（ms） */
@@ -51,10 +58,19 @@ const delayLyric = (): void => writeOffset(songOffset.value - LYRIC_OFFSET_STEP)
 const resetLyricOffset = (): void => writeOffset(0);
 
 const clearingCache = ref(false);
+const cachePopoverOpen = ref(false);
+
+watch(
+  () => (media.track ? lyricPreferenceKey(media.track) : null),
+  () => {
+    cachePopoverOpen.value = false;
+  },
+);
 
 /** 清理当前歌曲歌词缓存，并反馈清理结果 */
 const clearLyricCache = async (): Promise<void> => {
   if (clearingCache.value || !media.track) return;
+  cachePopoverOpen.value = false;
   if (typeof window.api.lyrics.clearTrackCache !== "function") {
     toast.warning(t("player.lyricCache.restartRequired"));
     return;
@@ -85,7 +101,7 @@ const clearLyricCache = async (): Promise<void> => {
     :class="
       immersive
         ? 'opacity-0 pointer-events-none'
-        : offsetPopoverOpen
+        : offsetPopoverOpen || cachePopoverOpen
           ? 'opacity-100 pointer-events-auto'
           : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto'
     "
@@ -163,17 +179,51 @@ const clearLyricCache = async (): Promise<void> => {
     </SButton>
     <SButton
       type="cover"
-      variant="ghost"
+      :variant="titaniumActive ? 'secondary' : 'ghost'"
       circle
       :size="40"
-      :disabled="!hasTrack"
-      :loading="clearingCache"
-      :title="t('player.lyricCache.clear')"
-      :aria-label="t('player.lyricCache.clear')"
-      @click="clearLyricCache"
+      :aria-pressed="titaniumActive"
+      :title="t(titaniumActive ? 'player.titanium.restore' : 'player.titanium.enable')"
+      :aria-label="t(titaniumActive ? 'player.titanium.restore' : 'player.titanium.enable')"
+      @click="settings.toggleTitaniumBackground"
     >
-      <template #icon><IconLucideTrash2 /></template>
+      <template #icon><IconSpTitaniumBackground /></template>
     </SButton>
+    <SPopover v-model:open="cachePopoverOpen" trigger="click" side="left" :side-offset="8" cover>
+      <template #trigger>
+        <SButton
+          type="cover"
+          variant="ghost"
+          circle
+          :size="40"
+          :disabled="!hasTrack"
+          :loading="clearingCache"
+          :title="t('player.lyricCache.clear')"
+          :aria-label="t('player.lyricCache.clear')"
+        >
+          <template #icon><IconLucideTrash2 /></template>
+        </SButton>
+      </template>
+      <div class="flex flex-col gap-3 w-56">
+        <h4 class="m-0 text-sm font-medium text-cover">{{ t("player.lyricCache.clear") }}</h4>
+        <p class="m-0 text-xs text-cover/70">{{ t("player.lyricCache.confirmHint") }}</p>
+        <div class="flex justify-end gap-2">
+          <SButton type="cover" variant="ghost" size="small" @click="cachePopoverOpen = false">
+            {{ t("common.cancel") }}
+          </SButton>
+          <SButton
+            type="cover"
+            variant="secondary"
+            size="small"
+            :disabled="!hasTrack"
+            :loading="clearingCache"
+            @click="clearLyricCache"
+          >
+            {{ t("player.lyricCache.confirm") }}
+          </SButton>
+        </div>
+      </div>
+    </SPopover>
     <CopyLyricsDialog v-model:open="copyDialogOpen" />
   </div>
 </template>

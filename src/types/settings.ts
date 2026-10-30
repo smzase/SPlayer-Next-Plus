@@ -13,7 +13,7 @@ import type { LyricAlignment } from "lyric-dom";
 /** 播放器背景类型 */
 export type PlayerBgType = "blur" | "solid" | "animation";
 /** 流体背景渲染引擎 */
-export type PlayerBgRenderer = "mesh" | "isolation" | "pixi";
+export type PlayerBgRenderer = "mesh" | "isolation" | "pixi" | "titanium";
 export type CoverLayout = "default" | "fullscreen";
 
 /** 点击歌曲列表中的单曲时如何更新播放队列 */
@@ -241,6 +241,8 @@ export interface PlayerSettings {
   playerBgType: PlayerBgType;
   /** 流体背景渲染引擎 */
   playerBgRenderer: PlayerBgRenderer;
+  /** 快捷切换前的背景，供再次点击时恢复 */
+  playerBgBeforeTitanium: { type: PlayerBgType; renderer: PlayerBgRenderer };
   /** 流体背景帧率（fps） */
   playerBgFps: number;
   /** 流体背景流动速度 */

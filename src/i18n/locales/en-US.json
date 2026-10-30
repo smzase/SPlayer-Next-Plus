@@ -752,6 +752,8 @@
     },
     "lyricCache": {
       "clear": "Clear this song's lyric cache and reload",
+      "confirmHint": "Clear the current song's cached lyrics and reload them?",
+      "confirm": "Clear cache",
       "cleared": "Lyric cache cleared for this song",
       "restartRequired": "Lyric cache clearing has been updated. Quit and restart the player to use it.",
       "failed": "Failed to clear lyric cache"
@@ -759,6 +761,10 @@
     "lyricOffset": {
       "title": "Lyric Offset",
       "hint": "Positive values advance lyrics, in milliseconds"
+    },
+    "titanium": {
+      "enable": "Switch to Titanium background",
+      "restore": "Restore previous background"
     },
     "lyricCredit": "Lyrics by",
     "songwriterCredit": "Songwriters:",
@@ -1949,7 +1955,8 @@
       "description": "Select the rendering engine for fluid animation background",
       "mesh": "Mesh Gradient Renderer",
       "isolation": "Isolation Renderer",
-      "pixi": "PixiJS Renderer"
+      "pixi": "PixiJS Renderer",
+      "titanium": "Titanium Renderer"
     },
     "playerBgFlowSpeed": {
       "label": "Flow Speed",

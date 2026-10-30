@@ -140,6 +140,7 @@ export const useSettingsStore = defineStore(
       singleTrackQueueMode: "replace",
       playerBgType: "blur",
       playerBgRenderer: "mesh",
+      playerBgBeforeTitanium: { type: "blur", renderer: "mesh" },
       playerBgFps: 30,
       playerBgFlowSpeed: 4,
       playerBgRenderScale: 0.5,
@@ -373,6 +374,21 @@ export const useSettingsStore = defineStore(
       }
     };
 
+    /** 在钛金属流沙与上次使用的背景之间切换 */
+    const toggleTitaniumBackground = (): void => {
+      if (player.playerBgType === "animation" && player.playerBgRenderer === "titanium") {
+        player.playerBgType = player.playerBgBeforeTitanium.type;
+        player.playerBgRenderer = player.playerBgBeforeTitanium.renderer;
+      } else {
+        player.playerBgBeforeTitanium = {
+          type: player.playerBgType,
+          renderer: player.playerBgRenderer,
+        };
+        player.playerBgType = "animation";
+        player.playerBgRenderer = "titanium";
+      }
+    };
+
     return {
       locale,
       appearance,
@@ -387,6 +403,7 @@ export const useSettingsStore = defineStore(
       syncSystem,
       setSystem,
       afterLocalChange,
+      toggleTitaniumBackground,
     };
   },
   {

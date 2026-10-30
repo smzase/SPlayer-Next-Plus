@@ -751,6 +751,8 @@
     },
     "lyricCache": {
       "clear": "清除这首歌的歌词缓存并重新加载",
+      "confirmHint": "将清除当前歌曲的歌词缓存并重新加载歌词，是否继续？",
+      "confirm": "确认清除",
       "cleared": "已清除这首歌的歌词缓存",
       "restartRequired": "歌词缓存清理功能已更新，请完全退出并重新启动播放器后使用",
       "failed": "歌词缓存清除失败"
@@ -758,6 +760,10 @@
     "lyricOffset": {
       "title": "歌词偏移",
       "hint": "正值为歌词提前，单位毫秒"
+    },
+    "titanium": {
+      "enable": "切换到钛金属流沙背景",
+      "restore": "恢复之前的背景"
     },
     "lyricCredit": "歌词作者：",
     "songwriterCredit": "创作者：",
@@ -1948,7 +1954,8 @@
       "description": "选择流体背景渲染引擎",
       "mesh": "网格渐变渲染器",
       "isolation": "isolation 渲染器",
-      "pixi": "PixiJS 渲染器"
+      "pixi": "PixiJS 渲染器",
+      "titanium": "钛金属流沙渲染器"
     },
     "playerBgFlowSpeed": {
       "label": "流动速度",
