@@ -362,7 +362,7 @@ defineExpose({
 
 <template>
   <div ref="wrapperRef" class="amll-lyrics-container" :class="contentVisible ? 'is-visible' : ''" />
-  <Teleport v-if="bottomLineEl" :to="bottomLineEl">
+  <Teleport v-if="bottomLineEl && settings.lyric.bottomInfo !== 'none'" :to="bottomLineEl">
     <slot name="bottom">
       <LyricCredit />
     </slot>

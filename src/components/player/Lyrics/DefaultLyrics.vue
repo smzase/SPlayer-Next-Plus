@@ -3,6 +3,7 @@ import type { LyricLine } from "lyric-kit";
 
 import { DEFAULTS, type LyricAlignment, type SpringParams, LyricRenderer } from "lyric-dom";
 import "lyric-dom/renderer.css";
+import { useSettingsStore } from "@/stores/settings";
 
 const props = withDefaults(
   defineProps<{
@@ -135,6 +136,7 @@ interface Emits {
 
 const emit = defineEmits<Emits>();
 
+const settings = useSettingsStore();
 const containerRef = ref<HTMLElement>();
 const bottomLineEl = ref<HTMLElement>();
 let renderer: LyricRenderer | null = null;
@@ -328,7 +330,7 @@ watch(
 
 <template>
   <div ref="containerRef">
-    <Teleport v-if="bottomLineEl" :to="bottomLineEl">
+    <Teleport v-if="bottomLineEl && settings.lyric.bottomInfo !== 'none'" :to="bottomLineEl">
       <slot name="bottom">
         <LyricCredit />
       </slot>
