@@ -4,6 +4,7 @@ import { useStatusStore } from "@/stores/status";
 import { useSettingsStore } from "@/stores/settings";
 import * as player from "@/core/player";
 import { VOLUME_STEP, volumeGainToPosition, volumePositionToGain } from "@/utils/volume";
+import { isWin } from "@/utils/config";
 import IconLucideSliders from "~icons/lucide/sliders-horizontal";
 import IconLucideGauge from "~icons/lucide/gauge";
 import IconLucideMoreVertical from "~icons/lucide/more-vertical";
@@ -32,15 +33,20 @@ const lyricButtonType = computed(() =>
   isDesktopLyricOpen.value ? (props.cover ? "cover" : "primary") : buttonType.value,
 );
 
-const volumePosition = computed(() => volumeGainToPosition(status.volume));
+const syncVolumeMixer = computed(() => isWin && settings.system.player.syncWindowsVolumeMixer);
+const volumePosition = computed(() => volumeGainToPosition(status.volume, syncVolumeMixer.value));
 const volumePercent = computed(() => Math.round(volumePosition.value * 100));
 
 /** 静音前的音量，用于解除静音时恢复 */
 const lastVolume = ref(status.volume || 0.7);
 
+/**
+ * 按当前音量模式用滚轮调整滑块位置
+ * @param e - 滚轮事件，向上增加音量
+ */
 const onVolumeWheel = (e: WheelEvent): void => {
   const delta = e.deltaY < 0 ? VOLUME_STEP : -VOLUME_STEP;
-  player.setVolume(volumePositionToGain(volumePosition.value + delta));
+  player.setVolume(volumePositionToGain(volumePosition.value + delta, syncVolumeMixer.value));
 };
 
 const toggleMute = (): void => {
@@ -115,7 +121,7 @@ const onMoreMenuSelect = (key: string): void => {
               :track-height="5"
               :cover="cover"
               vertical
-              @change="player.setVolume(volumePositionToGain($event))"
+              @change="player.setVolume(volumePositionToGain($event, syncVolumeMixer))"
             />
           </div>
           <span class="text-xs tabular-nums mt-2">{{ volumePercent }}%</span>

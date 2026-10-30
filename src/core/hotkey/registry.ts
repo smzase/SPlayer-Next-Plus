@@ -6,9 +6,11 @@
 
 import type { HotkeyActionId } from "@shared/types/hotkey";
 import { useStatusStore } from "@/stores/status";
+import { useSettingsStore } from "@/stores/settings";
 import { useSettingsDialog } from "@/settings/useSettingsDialog";
 import * as player from "@/core/player";
 import { VOLUME_STEP, volumeGainToPosition, volumePositionToGain } from "@/utils/volume";
+import { isWin } from "@/utils/config";
 import { setPlayerExpanded } from "@/services/playerTransition";
 
 /** 快进/快退步长（毫秒） */
@@ -46,12 +48,24 @@ export const buildRegistry = (): void => {
   // 音量增加
   handlers.set("player.volumeUp", () => {
     const status = useStatusStore();
-    player.setVolume(volumePositionToGain(volumeGainToPosition(status.volume) + VOLUME_STEP));
+    const syncVolumeMixer = isWin && useSettingsStore().system.player.syncWindowsVolumeMixer;
+    player.setVolume(
+      volumePositionToGain(
+        volumeGainToPosition(status.volume, syncVolumeMixer) + VOLUME_STEP,
+        syncVolumeMixer,
+      ),
+    );
   });
   // 音量减少
   handlers.set("player.volumeDown", () => {
     const status = useStatusStore();
-    player.setVolume(volumePositionToGain(volumeGainToPosition(status.volume) - VOLUME_STEP));
+    const syncVolumeMixer = isWin && useSettingsStore().system.player.syncWindowsVolumeMixer;
+    player.setVolume(
+      volumePositionToGain(
+        volumeGainToPosition(status.volume, syncVolumeMixer) - VOLUME_STEP,
+        syncVolumeMixer,
+      ),
+    );
   });
   // 循环模式
   handlers.set("player.cycleRepeat", () => player.cycleRepeatMode());

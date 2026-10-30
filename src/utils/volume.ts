@@ -18,12 +18,14 @@ const TAPER_GAIN = 10 ** ((-VOLUME_RANGE_DB * (1 - TAPER_POSITION)) / 20);
 const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
 
 /**
- * 将滑块位置转换为线性增益，主体与 dB 线性，底部线性收敛到静音
+ * 将滑块位置转换为增益，同步合成器时直接使用 Windows 百分比
  * @param position - 滑块位置（0.0 ~ 1.0）
+ * @param syncWindowsVolumeMixer - 是否已启用 Windows 音量合成器同步
  * @returns 音频线性增益（0.0 ~ 1.0）
  */
-export const volumePositionToGain = (position: number): number => {
+export const volumePositionToGain = (position: number, syncWindowsVolumeMixer = false): number => {
   const value = clamp01(position);
+  if (syncWindowsVolumeMixer) return value;
   if (value < TAPER_POSITION) return (value / TAPER_POSITION) * TAPER_GAIN;
   return 10 ** ((-VOLUME_RANGE_DB * (1 - value)) / 20);
 };
@@ -31,10 +33,12 @@ export const volumePositionToGain = (position: number): number => {
 /**
  * 将线性增益转换为滑块位置，保证存档增益还原后仍是同一响度
  * @param gain - 音频线性增益（0.0 ~ 1.0）
+ * @param syncWindowsVolumeMixer - 是否已启用 Windows 音量合成器同步
  * @returns 滑块位置（0.0 ~ 1.0）
  */
-export const volumeGainToPosition = (gain: number): number => {
+export const volumeGainToPosition = (gain: number, syncWindowsVolumeMixer = false): number => {
   const value = clamp01(gain);
+  if (syncWindowsVolumeMixer) return value;
   const position =
     value < TAPER_GAIN
       ? (value / TAPER_GAIN) * TAPER_POSITION

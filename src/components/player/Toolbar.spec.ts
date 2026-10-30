@@ -5,10 +5,19 @@ import persistedState from "pinia-plugin-persistedstate";
 import { createI18n } from "vue-i18n";
 import { nextTick } from "vue";
 import { useStatusStore } from "@/stores/status";
+import { useSettingsStore } from "@/stores/settings";
 import * as player from "@/core/player";
 import { buildRegistry, dispatch } from "@/core/hotkey/registry";
 import Toolbar from "./Toolbar.vue";
 import SSlider from "@/components/ui/SSlider.vue";
+
+const platform = vi.hoisted(() => ({ isWin: true }));
+vi.mock("@/utils/config", () => ({
+  /** 返回测试指定的平台 */
+  get isWin() {
+    return platform.isWin;
+  },
+}));
 
 vi.mock("@/stores/settings", async () => {
   const { defineStore } = await import("pinia");
@@ -16,6 +25,7 @@ vi.mock("@/stores/settings", async () => {
     useSettingsStore: defineStore("settings", {
       state: () => ({
         appearance: { showQualitySwitch: false },
+        system: { player: { syncWindowsVolumeMixer: false } },
         isDesktopLyricOpen: false,
       }),
     }),
@@ -24,6 +34,7 @@ vi.mock("@/stores/settings", async () => {
 vi.mock("@/core/player", () => ({ __v_isRef: false, setVolume: vi.fn() }));
 
 const wrappers: VueWrapper[] = [];
+/** 挂载音量工具栏并接通用于验证滚轮和快捷键的音量状态 */
 const mountToolbar = () => {
   const pinia = createPinia().use(persistedState);
   const wrapper = mount(Toolbar, {
@@ -58,10 +69,13 @@ const mountToolbar = () => {
     status.volume = gain;
   });
   buildRegistry();
-  return { wrapper, status };
+  return { wrapper, status, settings: useSettingsStore(pinia) };
 };
 
-beforeEach(() => localStorage.clear());
+beforeEach(() => {
+  localStorage.clear();
+  platform.isWin = true;
+});
 afterEach(() => {
   wrappers.splice(0).forEach((wrapper) => wrapper.unmount());
   localStorage.clear();
@@ -142,5 +156,76 @@ describe("感知音量控制", () => {
     await nextTick();
     await wrapper.get("button").trigger("wheel", { deltaY: -100 });
     expect(status.volume).toBe(1);
+  });
+
+  it.each([0, 5, 10, 50, 55, 65, 75, 85, 95, 100])(
+    "同步模式下滑块、显示和下发音量均为百分之 %i",
+    async (percent) => {
+      const { wrapper, status, settings } = mountToolbar();
+      settings.system.player.syncWindowsVolumeMixer = true;
+      status.volume = percent / 100;
+      await nextTick();
+      expect(wrapper.getComponent(SSlider).props("modelValue")).toBe(percent / 100);
+      expect(wrapper.text()).toContain(`${percent}%`);
+      wrapper.getComponent(SSlider).vm.$emit("change", percent / 100);
+      expect(player.setVolume).toHaveBeenLastCalledWith(percent / 100);
+    },
+  );
+
+  it("同步模式的滚轮和快捷键按合成器百分比调整并保留静音恢复", async () => {
+    const { wrapper, status, settings } = mountToolbar();
+    settings.system.player.syncWindowsVolumeMixer = true;
+    status.volume = 0;
+    await nextTick();
+    await wrapper.get("button").trigger("wheel", { deltaY: -100 });
+    expect(status.volume).toBeCloseTo(0.05);
+    dispatch("player.volumeUp");
+    expect(status.volume).toBeCloseTo(0.1);
+    await nextTick();
+    expect(wrapper.text()).toContain("10%");
+    await wrapper.get("button").trigger("click");
+    expect(status.volume).toBe(0);
+    await wrapper.get("button").trigger("click");
+    expect(status.volume).toBeCloseTo(0.1);
+    dispatch("player.volumeDown");
+    await nextTick();
+    await wrapper.get(".w-7").trigger("wheel", { deltaY: 100 });
+    expect(status.volume).toBe(0);
+    dispatch("player.volumeDown");
+    expect(status.volume).toBe(0);
+    status.volume = 1;
+    dispatch("player.volumeUp");
+    expect(status.volume).toBe(1);
+  });
+
+  it("切换同步开关仅重新显示百分比，保留旧存档增益并立即更新快捷键模式", async () => {
+    localStorage.setItem("status", JSON.stringify({ volume: 0.1 }));
+    const { wrapper, status, settings } = mountToolbar();
+    expect(wrapper.text()).toContain("50%");
+    settings.system.player.syncWindowsVolumeMixer = true;
+    await nextTick();
+    expect(wrapper.text()).toContain("10%");
+    expect(status.volume).toBe(0.1);
+    expect(player.setVolume).not.toHaveBeenCalled();
+    settings.system.player.syncWindowsVolumeMixer = false;
+    await nextTick();
+    expect(wrapper.text()).toContain("50%");
+    expect(status.volume).toBe(0.1);
+    expect(player.setVolume).not.toHaveBeenCalled();
+    dispatch("player.volumeUp");
+    expect(status.volume).toBeCloseTo(0.12589254, 6);
+  });
+
+  it("非 Windows 平台即使存有同步配置仍使用感知曲线", async () => {
+    platform.isWin = false;
+    const { wrapper, status, settings } = mountToolbar();
+    settings.system.player.syncWindowsVolumeMixer = true;
+    status.volume = 0.1;
+    await nextTick();
+    expect(wrapper.text()).toContain("50%");
+    wrapper.getComponent(SSlider).vm.$emit("change", 0.5);
+    expect(player.setVolume).toHaveBeenLastCalledWith(0.1);
+    dispatch("player.volumeUp");
+    expect(status.volume).toBeCloseTo(0.12589254, 6);
   });
 });
