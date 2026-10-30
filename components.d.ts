@@ -21,6 +21,7 @@ declare module 'vue' {
     AudioRecognitionLyricText: typeof import('./src/components/audio-recognition/AudioRecognitionLyricText.vue')['default']
     AudioRecognitionResultCard: typeof import('./src/components/audio-recognition/AudioRecognitionResultCard.vue')['default']
     AutoCloseDialog: typeof import('./src/components/modals/AutoCloseDialog.vue')['default']
+    AutoMixComponents: typeof import('./src/components/settings/custom/AutoMixComponents.vue')['default']
     BackgroundImagePicker: typeof import('./src/components/settings/custom/BackgroundImagePicker.vue')['default']
     BackgroundRender: typeof import('./src/components/player/FullPlayer/BackgroundRender.vue')['default']
     BottomSpectrum: typeof import('./src/components/player/FullPlayer/BottomSpectrum.vue')['default']

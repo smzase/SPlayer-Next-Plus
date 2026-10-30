@@ -20,7 +20,7 @@ const localCacheCategory: SettingCategory = {
             when: (next) => {
               if (next !== false) return false;
               const player = useSettingsStore().player;
-              return player.preloadNextTrack || player.transitionMode === "crossfade";
+              return player.preloadNextTrack || player.transitionMode !== "none";
             },
             titleKey: "settings.confirm.disableSongCacheTitle",
             contentKey: "settings.confirm.disableSongCacheContent",
@@ -30,7 +30,7 @@ const localCacheCategory: SettingCategory = {
             if (enabled !== false) return;
             const player = useSettingsStore().player;
             player.preloadNextTrack = false;
-            if (player.transitionMode === "crossfade") player.transitionMode = "none";
+            player.transitionMode = "none";
           },
           children: [
             {

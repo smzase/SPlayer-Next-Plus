@@ -1,4 +1,3 @@
-/* eslint-disable vue/one-component-per-file */
 import { mount } from "@vue/test-utils";
 import { createI18n } from "vue-i18n";
 import { defineComponent, h, ref } from "vue";

@@ -95,15 +95,12 @@ impl TaskbarStrategy for Win11Strategy {
             }
         }
 
-        let uia_bounds = {
-            let scanner = self.scanner.as_ref()?;
-            match scanner.scan_taskbar(self.h_taskbar) {
-                Ok(b) => b,
-                Err(_) => {
-                    error!("scan_taskbar 失败");
-                    self.scanner = None;
-                    return None;
-                }
+        let uia_bounds = match self.scanner.as_ref()?.scan_taskbar(self.h_taskbar) {
+            Ok(bounds) => bounds,
+            Err(_) => {
+                error!("scan_taskbar 失败");
+                self.scanner = None;
+                return None;
             }
         };
 

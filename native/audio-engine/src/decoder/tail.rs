@@ -130,9 +130,10 @@ mod tests {
     }
 
     #[test]
+    /** 验证音乐恢复后不会将中间静音误判为曲尾 */
     fn ignores_a_quiet_passage_when_music_returns() {
         let file = fixture("returns", 20, |time| {
-            if time < 5.0 || time > 18.0 {
+            if !(5.0..=18.0).contains(&time) {
                 0.1
             } else {
                 0.0

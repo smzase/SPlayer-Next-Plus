@@ -7,6 +7,9 @@ const mocks = vi.hoisted(() => ({
   load: vi.fn(),
   stop: vi.fn(),
   seek: vi.fn(),
+  play: vi.fn(),
+  autoMixPlan: vi.fn(),
+  reapplyWindowsVolume: vi.fn(),
   metadata: vi.fn(),
   prepareTransition: vi.fn(),
   cancel: vi.fn(),
@@ -32,6 +35,7 @@ vi.mock("@main/services/engine", () => {
     load: mocks.load,
     stop: mocks.stop,
     seek: mocks.seek,
+    play: mocks.play,
     getDuration: () => 10,
     getPosition: () => 5,
     getSpeed: () => 1,
@@ -55,6 +59,12 @@ vi.mock("@main/services/playerPreload", () => ({
   takeTransitionReady: vi.fn(),
   setCurrentTransitionRange: vi.fn(),
   getTransitionEndMs: (end: number) => end,
+  getPreparedAutoMixPlan: mocks.autoMixPlan,
+}));
+vi.mock("@main/services/windowsVolumeSync", () => ({
+  initWindowsVolumeSync: vi.fn(),
+  getPlayerVolume: () => 1,
+  reapplyWindowsVolume: mocks.reapplyWindowsVolume,
 }));
 vi.mock("@main/utils/logger", () => ({
   playerLog: { info: vi.fn(), debug: vi.fn(), error: vi.fn() },
@@ -140,6 +150,7 @@ describe("交接响应的主进程竞态保护", () => {
     mocks.reset.length = 0;
     mocks.seek.mockResolvedValue(undefined);
     mocks.load.mockResolvedValue(meta);
+    mocks.autoMixPlan.mockReset();
     mocks.streamingPrepare.mockReset().mockResolvedValue(undefined);
     mocks.streamingStop.mockResolvedValue(undefined);
     const { registerPlayerIpc } = await import("./player");
@@ -207,6 +218,31 @@ describe("交接响应的主进程竞态保护", () => {
     expect(mocks.metadata).toHaveBeenCalledOnce();
     expect(mocks.prepareTransition).toHaveBeenCalledOnce();
   });
+
+  it.each([
+    { cueStartMs: undefined, expectedStart: 0 },
+    { cueStartMs: 2000, expectedStart: 2 },
+  ])(
+    "手动播放 AutoMix 预载槽位时恢复音量并回到正确起点 $expectedStart",
+    async ({ cueStartMs, expectedStart }) => {
+      mocks.autoMixPlan.mockReturnValue({ inStartMs: 3000 });
+      mocks.load.mockResolvedValueOnce({ ...meta, preparedPosition: 3 });
+      const result = await invoke("player:load", "next.wav", {
+        preparedId: "slot",
+        meta: { ...options.meta, cueStartMs, cueEndMs: cueStartMs == null ? undefined : 8000 },
+      });
+      expect(result).toMatchObject({ success: true });
+      expect(mocks.load).toHaveBeenCalledWith("next.wav", false, "slot");
+      expect(mocks.seek).toHaveBeenCalledWith(expectedStart);
+      expect(mocks.reapplyWindowsVolume).toHaveBeenCalledOnce();
+      expect(mocks.reapplyWindowsVolume.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.play.mock.invocationCallOrder[0]!,
+      );
+      expect(mocks.seek.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.play.mock.invocationCallOrder[0]!,
+      );
+    },
+  );
 
   it("流媒体加载由主进程解析地址，解码成功后才绑定播放会话", async () => {
     mocks.streamingPrepare.mockResolvedValueOnce({

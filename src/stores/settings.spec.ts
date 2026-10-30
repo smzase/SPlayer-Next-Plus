@@ -1,4 +1,3 @@
-/* eslint-disable vue/one-component-per-file -- 每个持久化测试需要独立的应用实例 */
 import { createApp } from "vue";
 import { createPinia, setActivePinia } from "pinia";
 import persistedState from "pinia-plugin-persistedstate";

@@ -259,6 +259,7 @@ const onPointerUp = (): void => {
       disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer',
       vertical ? 'flex flex-col items-center h-full' : '',
       glow ? 's-slider--glow' : '',
+      cover ? 's-slider--cover' : '',
     ]"
     :style="{
       '--s-slider-progress': progressPercent,
@@ -454,17 +455,40 @@ const onPointerUp = (): void => {
 </template>
 
 <style scoped>
-.s-slider-track {
+.s-slider-fill {
+  --s-slider-glow: 0.4;
+  --s-slider-glow-color: var(--s-primary);
   box-shadow: 0 0 0 0 transparent;
-  transition:
-    background-color 0.4s ease,
-    box-shadow 0.4s ease;
+  transition: box-shadow 0.4s ease;
 }
 
-.s-slider--glow .s-slider-track {
-  background-color: rgb(var(--s-primary));
+.dark .s-slider-fill {
+  --s-slider-glow: 1;
+}
+
+.s-slider--cover .s-slider-fill {
+  --s-slider-glow: 1;
+  --s-slider-glow-color: var(--s-cover);
+}
+
+.s-slider--glow .s-slider-fill {
   box-shadow:
-    0 0 3px 0.5px rgb(var(--s-primary) / 0.85),
-    0 0 8px 1px rgb(var(--s-primary) / 0.4);
+    0 0 3px 0.5px rgb(var(--s-slider-glow-color) / calc(0.8 * var(--s-slider-glow))),
+    0 0 8px 1px rgb(var(--s-slider-glow-color) / calc(0.35 * var(--s-slider-glow)));
+  animation: s-slider-breathe 1.4s ease-in-out infinite alternate;
+}
+
+@keyframes s-slider-breathe {
+  to {
+    box-shadow:
+      0 0 4px 1px rgb(var(--s-slider-glow-color) / calc(0.95 * var(--s-slider-glow))),
+      0 0 12px 2px rgb(var(--s-slider-glow-color) / calc(0.5 * var(--s-slider-glow)));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .s-slider--glow .s-slider-fill {
+    animation: none;
+  }
 }
 </style>

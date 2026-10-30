@@ -167,6 +167,7 @@ export const useSettingsStore = defineStore(
       preloadNextTrack: false,
       transitionMode: "none",
       transitionPreference: "standard",
+      automixCrossfadeFallback: true,
       searchPlayBehavior: "current",
     });
 
@@ -418,13 +419,16 @@ export const useSettingsStore = defineStore(
           player: PlayerSettings;
           preset: PresetSettings;
         };
-        if (player.transitionMode !== "crossfade") player.transitionMode = "none";
+        if (player.transitionMode !== "crossfade" && player.transitionMode !== "automix")
+          player.transitionMode = "none";
         if (
           player.transitionPreference !== "conservative" &&
           player.transitionPreference !== "eager"
         ) {
           player.transitionPreference = "standard";
         }
+        if (typeof player.automixCrossfadeFallback !== "boolean")
+          player.automixCrossfadeFallback = true;
         if (typeof lyric.detectBackgroundLyrics !== "boolean") {
           lyric.detectBackgroundLyrics = true;
         }

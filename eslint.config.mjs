@@ -59,6 +59,13 @@ export default defineConfig(
     },
   },
   {
+    // 测试文件内联多个桩组件
+    files: ["**/*.spec.ts"],
+    rules: {
+      "vue/one-component-per-file": "off",
+    },
+  },
+  {
     files: ["**/*.cjs"],
     rules: {
       "@typescript-eslint/no-require-imports": "off",

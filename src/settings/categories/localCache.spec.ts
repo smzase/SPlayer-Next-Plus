@@ -84,8 +84,8 @@ describe("歌曲缓存与预载、播放过渡联动", () => {
   it.each([
     { preload: true, mode: "none", expectedMode: "none", needsConfirm: true },
     { preload: false, mode: "crossfade", expectedMode: "none", needsConfirm: true },
-    { preload: true, mode: "gapless", expectedMode: "gapless", needsConfirm: true },
-    { preload: false, mode: "gapless", expectedMode: "gapless", needsConfirm: false },
+    { preload: true, mode: "automix", expectedMode: "none", needsConfirm: true },
+    { preload: false, mode: "automix", expectedMode: "none", needsConfirm: true },
     { preload: false, mode: "none", expectedMode: "none", needsConfirm: false },
   ])("预载为 $preload 且过渡为 $mode 时仅关闭依赖缓存的功能", async (scenario) => {
     mocks.player = { preloadNextTrack: scenario.preload, transitionMode: scenario.mode };

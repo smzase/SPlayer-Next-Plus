@@ -730,7 +730,8 @@
   "player": {
     "prev": "Previous",
     "next": "Next",
-    "transitioning": "Transition",
+    "transitioning": "Crossfade",
+    "automixing": "AutoMix",
     "heartMode": {
       "needLogin": "Sign in to use Heart Mode",
       "noSeed": "No seed track available for Heart Mode",
@@ -1230,10 +1231,25 @@
       "label": "Transition mode",
       "description": "Adjust how songs sound when they change",
       "none": "No transition",
-      "crossfade": "Crossfade"
+      "crossfade": "Crossfade",
+      "automix": "AutoMix"
+    },
+    "automixCrossfadeFallback": {
+      "label": "Crossfade when mixing fails",
+      "description": "Crossfade when tracks can't be mixed"
+    },
+    "automixComponents": {
+      "label": "AutoMix model management",
+      "description": "Models for the AutoMix effect; falls back to the default effect when required models aren't ready",
+      "configure": "Configure models",
+      "download": "Download",
+      "ready": "Installed",
+      "unsupported": "Unavailable",
+      "missing": "Not installed",
+      "error": "Installation failed"
     },
     "transitionPreference": {
-      "label": "Handoff preference",
+      "label": "Mix handoff preference",
       "description": "Adjust when the transition starts and how long songs overlap; Eager starts earlier and lasts longer",
       "conservative": "Conservative",
       "standard": "Standard",
@@ -1473,6 +1489,7 @@
       "enableTitle": "Confirm enabling",
       "scrobbleRiskContent": "Scrobbling is still experimental. Reported listening records are not guaranteed to count as valid plays, and the associated risks are not yet fully understood.\nEnabling it may trigger account risk controls or other account security issues. Consider the potential risks carefully before enabling this feature.",
       "highResourceContent": "Enabling it may noticeably increase memory and CPU usage, and could cause stuttering on lower-end devices. Enable it anyway?",
+      "transitionHighResourceContent": "Playback transitions are resource-intensive and are intended for users with higher-performance devices.\nThis feature is still in testing, and for some tracks the transition may currently sound worse than a plain track change.\nEnabling it also turns on track preloading, song caching and streaming caching, which increases memory, CPU, network and disk usage. Enable it anyway?",
       "restartRequiredTitle": "Restart Required",
       "restartRequiredContent": "This setting requires an app restart. Save and relaunch now?",
       "kugouLoginVersionTitle": "Switch KG Login Version",
@@ -2655,6 +2672,17 @@
       "button": "Clear All",
       "confirmTitle": "Clear all database caches?",
       "confirmDesc": "All database caches above will be cleared. This cannot be undone."
+    },
+    "automixModels": {
+      "beat": {
+        "label": "Beat model (Beat This!)"
+      },
+      "demucs": {
+        "label": "Stem model (Demucs)"
+      },
+      "runtime": {
+        "label": "Analysis runtime"
+      }
     }
   },
   "userProfile": {
@@ -2733,6 +2761,7 @@
     }
   },
   "collection": {
+    "disc": "Disc {disc}",
     "totalDuration": "About {time}",
     "unknownAlbum": "Unknown Album",
     "empty": "No songs",
@@ -2883,6 +2912,7 @@
     "MAX_CONSECUTIVE_FAILURES": "Too many consecutive playback failures",
     "SCAN_NO_DIRS": "No scan directories configured",
     "SCAN_DIR_EXISTS": "Directory already exists",
+    "SCAN_DIR_NESTED": "This directory overlaps an existing scan directory",
     "SCAN_DIR_NOT_FOUND": "Directory not found",
     "SCAN_DIR_NOT_SELECTED": "No directory selected",
     "TAG_READ_FAILED": "Failed to read tags",
