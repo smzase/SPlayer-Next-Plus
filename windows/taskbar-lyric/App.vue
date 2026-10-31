@@ -55,6 +55,7 @@ const playMode = ref<TaskbarPlayMode>("repeat-list");
 const playModeDisabled = ref(true);
 const locale = ref<LocaleCode>("zh-CN");
 const maxLayoutWidth = ref(400);
+const layoutHeight = ref(48);
 const mainContentWidth = ref(0);
 const mainExitContentWidth = ref(0);
 const backgroundContentWidth = ref(0);
@@ -62,6 +63,9 @@ const dividerContentWidth = ref(0);
 const wrapperRef = ref<HTMLElement | null>(null);
 const backgroundGroupRef = ref<HTMLElement | null>(null);
 let hoverLeaveTimer: number | null = null;
+/** 控件收起动画结束后再收窄窗口，避免中途裁切 */
+let collapseTimer: number | null = null;
+const CONTROLS_COLLAPSE_MS = 450;
 let widthReportRaf = 0;
 let lastReportedWidth = 0;
 let backgroundMoveAnimation: Animation | null = null;
@@ -69,7 +73,11 @@ let backgroundMoveAnimation: Animation | null = null;
 /** 给字体亚像素取整和逐字渐变预留空间，避免临界宽度误触发滚动 */
 const LYRIC_WIDTH_GUARD = 8;
 
-/** 按歌词行动画结束后的字号换算文字宽度，避免副行升为主行时低估空间 */
+/**
+ * 按高度适配后的字号换算文字宽度，避免切行时低估空间
+ * @param element - 歌词文字元素
+ * @returns 动画结束后的文字宽度
+ */
 const measureTargetTextWidth = (element: HTMLElement): number => {
   const line = element.closest<HTMLElement>(".lyric-line, .background-lyric-line");
   const naturalWidth = element.offsetWidth;
@@ -77,7 +85,9 @@ const measureTargetTextWidth = (element: HTMLElement): number => {
 
   const currentFontSize = Number.parseFloat(getComputedStyle(line).fontSize);
   const targetFontSize =
-    line.dataset.role === "secondary" ? config.fontSize * 0.82 : config.fontSize;
+    line.dataset.role === "secondary"
+      ? typography.value.fontSize * 0.82
+      : typography.value.fontSize;
   if (!Number.isFinite(currentFontSize) || currentFontSize <= 0) return naturalWidth;
   return naturalWidth * (targetFontSize / currentFontSize);
 };
@@ -157,7 +167,7 @@ const reportContentWidth = (): void => {
   backgroundContentWidth.value =
     renderedBackgroundTextElements.length > 0 ? renderedBackgroundTextWidth + widthGuard : 0;
   dividerContentWidth.value = renderedBackgroundTextElements.length > 0 ? dividerWidth : 0;
-  if (isHovered.value) {
+  if (isHovered.value || collapseTimer !== null) {
     const targetWidth = Math.ceil(maxLayoutWidth.value);
     setReportedContentWidth(targetWidth, shouldDeferWindowShrink);
     return;
@@ -224,10 +234,18 @@ const animateBackgroundMove = async (): Promise<void> => {
   );
 };
 
+/**
+ * 更新悬停状态，并在控件收起后恢复内容宽度
+ * @param hovered - 光标是否在交互区域内
+ */
 const setContentHovered = (hovered: boolean): void => {
   if (hoverLeaveTimer !== null) {
     window.clearTimeout(hoverLeaveTimer);
     hoverLeaveTimer = null;
+  }
+  if (collapseTimer !== null) {
+    window.clearTimeout(collapseTimer);
+    collapseTimer = null;
   }
   if (config.pureLyricMode) {
     isHovered.value = false;
@@ -242,7 +260,10 @@ const setContentHovered = (hovered: boolean): void => {
   hoverLeaveTimer = window.setTimeout(() => {
     hoverLeaveTimer = null;
     isHovered.value = false;
-    nextTick(scheduleContentWidthReport);
+    collapseTimer = window.setTimeout(() => {
+      collapseTimer = null;
+      scheduleContentWidthReport();
+    }, CONTROLS_COLLAPSE_MS);
   }, 40);
 };
 
@@ -304,6 +325,8 @@ interface RenderItem {
   kind: "lyric" | "translation" | "meta";
   text: string;
   line?: LyricLine;
+  /** 翻译行使用原文的演唱时间 */
+  timingLine?: LyricLine;
 }
 
 const items = computed<RenderItem[]>(() => {
@@ -327,6 +350,7 @@ const items = computed<RenderItem[]>(() => {
           role: "secondary",
           kind: "translation",
           text: translation,
+          timingLine: line,
         });
       } else {
         const next = lyric.value[idx + 1];
@@ -377,6 +401,7 @@ const backgroundItems = computed<RenderItem[]>(() => {
       role: "secondary",
       kind: "translation",
       text: line.translatedLyric,
+      timingLine: line,
     });
   }
   return list;
@@ -394,8 +419,23 @@ const lyricLayoutStyle = computed(() => ({
   "--tbl-divider-content-width": dividerContentWidth.value + "px",
 }));
 
+const typography = computed(() => {
+  const lineUnits = config.doubleLine ? 1.82 : 1;
+  const requestedHeight = config.fontSize * 1.4 * lineUnits;
+  const verticalInset = Math.min(4, Math.max(1, (layoutHeight.value - requestedHeight) / 2));
+  return {
+    verticalInset,
+    fontSize: Math.min(
+      config.fontSize,
+      (layoutHeight.value - verticalInset * 2) / (1.4 * lineUnits),
+    ),
+  };
+});
+
 const rootStyle = computed(() => ({
-  "--tbl-font-size": `${config.fontSize}px`,
+  "--tbl-font-size": `${typography.value.fontSize}px`,
+  "--tbl-vertical-inset": `${typography.value.verticalInset}px`,
+  lineHeight: 1.4,
   "--tbl-font-weight": config.fontWeight,
   "--tbl-translation-font-weight": config.translationFontWeight,
   fontWeight: config.fontWeight,
@@ -479,20 +519,12 @@ const handleContainerDoubleClick = (): void => {
 const unsubscribers: Array<() => void> = [];
 
 onMounted(async () => {
-  try {
-    const saved = (await window.api.config.get("taskbarLyric")) as TaskbarLyricSettings | null;
-    if (saved) Object.assign(config, saved);
-    await nextTick();
-    scheduleContentWidthReport();
-  } catch (error) {
-    console.error("[taskbar-lyric] load config failed", error);
-  }
-
   unsubscribers.push(
     window.api.taskbarLyric.onLayout((data) => {
       anchor.value = data.anchor;
       taskbarIsLight.value = data.isLight;
       maxLayoutWidth.value = data.maxWidth;
+      layoutHeight.value = data.height;
       nextTick(scheduleContentWidthReport);
     }),
     window.api.taskbarLyric.onConfigChange((next) => {
@@ -508,6 +540,15 @@ onMounted(async () => {
     }),
     window.api.taskbarLyric.onPlaybackChange(applyPlaybackSnapshot),
   );
+
+  try {
+    const saved = (await window.api.config.get("taskbarLyric")) as TaskbarLyricSettings | null;
+    if (saved) Object.assign(config, saved);
+    await nextTick();
+    scheduleContentWidthReport();
+  } catch (error) {
+    console.error("[taskbar-lyric] load config failed", error);
+  }
 
   try {
     applyPlaybackSnapshot(await window.api.taskbarLyric.requestPlayback());
@@ -540,6 +581,7 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  if (collapseTimer !== null) window.clearTimeout(collapseTimer);
   if (widthReportRaf) cancelAnimationFrame(widthReportRaf);
   backgroundMoveAnimation?.cancel();
   backgroundMoveAnimation = null;
@@ -555,6 +597,7 @@ onBeforeUnmount(() => {
   <div
     ref="wrapperRef"
     class="wrapper"
+    :style="{ height: `${layoutHeight}px` }"
     :data-align="anchor"
     @mouseenter="setContentHovered(true)"
     @mouseleave="setContentHovered(false)"
@@ -666,6 +709,7 @@ onBeforeUnmount(() => {
                 <TaskbarLyricLine
                   :line="item.line"
                   :text="item.text"
+                  :timing-line="item.timingLine"
                   :word-by-word="shouldRenderWordByWord(item)"
                   :anchor="anchor"
                   :layout-width="mainContentWidth"
@@ -697,6 +741,7 @@ onBeforeUnmount(() => {
                   <TaskbarLyricLine
                     :line="item.line"
                     :text="item.text"
+                    :timing-line="item.timingLine"
                     :word-by-word="shouldRenderWordByWord(item)"
                     :anchor="anchor"
                     :layout-width="backgroundContentWidth"
@@ -742,7 +787,7 @@ onBeforeUnmount(() => {
   --tbl-control-size: clamp(16px, calc((100vw - 44px) / 5), calc(100vh - 16px));
   position: relative;
   width: 100%;
-  height: calc(100% - 8px);
+  height: calc(100% - var(--tbl-vertical-inset) * 2);
   display: flex;
   align-items: center;
   border-radius: 8px;

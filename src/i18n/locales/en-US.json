@@ -16,7 +16,6 @@
     "next": "Next",
     "back": "Back",
     "remove": "Remove",
-    "back": "Back",
     "finish": "Finish",
     "footer": "You can adjust anything skipped here anytime in Settings",
     "welcome": {
@@ -1404,15 +1403,15 @@
       "description": "Manage multiple lyric sources in priority order",
       "placeholder": "Enter AMLL TTML DB URL",
       "warning": "If you do not know what this does, please leave it as default",
-      "hint": "Drag the left handles to set priority. Sources are tried from top to bottom until lyrics are found.",
+      "hint": "Drag the handles to set priority. Sources are tried from top to bottom. An empty list uses the default sources.",
       "add": "Add source",
       "drag": "Drag to reorder",
       "source": "Lyric source {index}",
       "remove": "Remove lyric source {index}",
       "duplicate": "Source URLs must be unique",
-      "placeholders": "%p is the platform path, %s is the song ID",
+      "placeholders": "The official API needs no placeholders. Mirrors require %s (song ID); %p (platform path) is optional.",
       "docsHint": "More info at",
-      "invalid": "Add at least one valid HTTP or HTTPS URL. Each URL must contain %p and %s."
+      "invalid": "Enter the official AMLL API URL or a valid HTTP or HTTPS mirror URL containing %s."
     },
     "enableExcludeLyrics": {
       "label": "Enable Lyric Exclusion",
@@ -1634,6 +1633,10 @@
     "enableScale": {
       "label": "Lyric Scale",
       "description": "Scale down inactive lines slightly to highlight current line"
+    },
+    "enableBalancedWrap": {
+      "label": "Balanced Line Wrap",
+      "description": "Wrap long lines into lines of similar length, breaking at punctuation and spaces first"
     },
     "lyricAlignment": {
       "label": "Lyric Alignment",
@@ -1900,8 +1903,8 @@
       "description": "Taskbar lyric text size (px)"
     },
     "taskbarLyricFontWeight": {
-      "label": "Font Weight",
-      "description": "Taskbar lyric text weight"
+      "label": "Lyric Weight",
+      "description": "Set the weight of the primary and next lyric lines"
     },
     "taskbarLyricShowCover": {
       "label": "Show Cover",
@@ -1926,10 +1929,6 @@
     "taskbarLyricWordByWord": {
       "label": "Word by Word",
       "description": "Render highlight progress per word"
-    },
-    "taskbarLyricFontWeight": {
-      "label": "Lyric Weight",
-      "description": "Set the weight of the primary and next lyric lines"
     },
     "taskbarLyricTranslationFontWeight": {
       "label": "Translation Weight",

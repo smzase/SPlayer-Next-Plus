@@ -39,7 +39,7 @@ import type {
   CommentReplyArgs,
 } from "@shared/types/comment";
 import type { AiModelSaveInput } from "@shared/types/ai";
-import type { DesktopLyricUnlockButtonBounds } from "@shared/types/window";
+import type { DesktopLyricUnlockButtonBounds, TaskbarLyricLayoutEvent } from "@shared/types/window";
 import type {
   LegacyPlaylistRecord,
   PlaylistCreateInput,
@@ -482,22 +482,8 @@ const api = {
   taskbarLyric: {
     setContentWidth: (width: number) => ipcRenderer.send("taskbarLyric:setContentWidth", width),
     // 订阅布局变化（锚定方向、是否居中、系统类型、任务栏主题）
-    onLayout: (
-      callback: (data: {
-        isCentered: boolean;
-        systemType: string;
-        isLight: boolean;
-        anchor: "left" | "right";
-        maxWidth: number;
-      }) => void,
-    ) =>
-      subscribe<{
-        isCentered: boolean;
-        systemType: string;
-        isLight: boolean;
-        anchor: "left" | "right";
-        maxWidth: number;
-      }>("taskbarLyric:layout", callback),
+    onLayout: (callback: (data: TaskbarLyricLayoutEvent) => void) =>
+      subscribe<TaskbarLyricLayoutEvent>("taskbarLyric:layout", callback),
     // 订阅任务栏歌词配置变化
     onConfigChange: (callback: (config: TaskbarLyricSettings) => void) =>
       subscribe<TaskbarLyricSettings>("taskbarLyric:configChange", callback),

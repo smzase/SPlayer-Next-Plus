@@ -86,8 +86,8 @@ describe("感知音量控制", () => {
     localStorage.setItem("status", JSON.stringify({ volume: 0.125 }));
     const { wrapper, status } = mountToolbar();
     expect(status.volume).toBe(0.125);
-    expect(wrapper.getComponent(SSlider).props("modelValue")).toBeCloseTo(0.548455, 5);
-    expect(wrapper.text()).toContain("55%");
+    expect(wrapper.getComponent(SSlider).props("modelValue")).toBeCloseTo(0.285739, 5);
+    expect(wrapper.text()).toContain("29%");
     expect(player.setVolume).not.toHaveBeenCalled();
   });
 
@@ -97,15 +97,15 @@ describe("感知音量控制", () => {
     Object.assign(hitbox.element, { setPointerCapture: vi.fn() });
     vi.spyOn(hitbox.element, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 15, 100));
     await hitbox.trigger("pointerdown", { pointerId: 1, clientY: 70 });
-    expect(status.volume).toBeCloseTo(0.0398, 4);
+    expect(status.volume).toBeCloseTo(0.13553, 4);
     await hitbox.trigger("pointermove", { pointerId: 1, clientY: 50 });
     await hitbox.trigger("pointerup", { pointerId: 1, clientY: 50 });
-    expect(player.setVolume).toHaveBeenLastCalledWith(expect.closeTo(0.1, 6));
-    expect(status.volume).toBeCloseTo(0.1, 6);
-    expect(JSON.parse(localStorage.getItem("status")!).volume).toBeCloseTo(0.1, 6);
+    expect(player.setVolume).toHaveBeenLastCalledWith(expect.closeTo(0.316439, 5));
+    expect(status.volume).toBeCloseTo(0.316439, 5);
+    expect(JSON.parse(localStorage.getItem("status")!).volume).toBeCloseTo(0.316439, 5);
     wrapper.unmount();
     const restored = mountToolbar();
-    expect(restored.status.volume).toBeCloseTo(0.1, 6);
+    expect(restored.status.volume).toBeCloseTo(0.316439, 5);
     expect(restored.wrapper.text()).toContain("50%");
   });
 
@@ -114,14 +114,14 @@ describe("感知音量控制", () => {
     status.volume = 0.125;
     await nextTick();
     await wrapper.get(target).trigger("wheel", { deltaY: -100 });
-    expect(status.volume).toBeCloseTo(0.15737, 4);
-    expect(wrapper.text()).toContain("60%");
+    expect(status.volume).toBeCloseTo(0.16682, 4);
+    expect(wrapper.text()).toContain("34%");
     expect(dispatch("player.volumeDown")).toBe(true);
     await nextTick();
     expect(status.volume).toBeCloseTo(0.125);
     expect(dispatch("player.volumeUp")).toBe(true);
     await nextTick();
-    expect(status.volume).toBeCloseTo(0.15737, 4);
+    expect(status.volume).toBeCloseTo(0.16682, 4);
     await wrapper.get(target).trigger("wheel", { deltaY: 100 });
     expect(status.volume).toBeCloseTo(0.125);
   });
@@ -135,14 +135,14 @@ describe("感知音量控制", () => {
     expect(wrapper.text()).toContain("0%");
     await wrapper.get("button").trigger("click");
     expect(status.volume).toBe(0.027);
-    expect(wrapper.text()).toContain("22%");
+    expect(wrapper.text()).toContain("11%");
   });
 
   it("滚轮和快捷键均限制在静音与满音量之间", async () => {
     const { wrapper, status } = mountToolbar();
     status.volume = 0;
     expect(dispatch("player.volumeUp")).toBe(true);
-    expect(status.volume).toBeCloseTo(0.00792, 5);
+    expect(status.volume).toBeCloseTo(0.006923, 5);
     await nextTick();
     await wrapper.get("button").trigger("wheel", { deltaY: 100 });
     expect(status.volume).toBe(0);
@@ -201,7 +201,7 @@ describe("感知音量控制", () => {
   it("切换同步开关仅重新显示百分比，保留旧存档增益并立即更新快捷键模式", async () => {
     localStorage.setItem("status", JSON.stringify({ volume: 0.1 }));
     const { wrapper, status, settings } = mountToolbar();
-    expect(wrapper.text()).toContain("50%");
+    expect(wrapper.text()).toContain("25%");
     settings.system.player.syncWindowsVolumeMixer = true;
     await nextTick();
     expect(wrapper.text()).toContain("10%");
@@ -209,11 +209,11 @@ describe("感知音量控制", () => {
     expect(player.setVolume).not.toHaveBeenCalled();
     settings.system.player.syncWindowsVolumeMixer = false;
     await nextTick();
-    expect(wrapper.text()).toContain("50%");
+    expect(wrapper.text()).toContain("25%");
     expect(status.volume).toBe(0.1);
     expect(player.setVolume).not.toHaveBeenCalled();
     dispatch("player.volumeUp");
-    expect(status.volume).toBeCloseTo(0.12589254, 6);
+    expect(status.volume).toBeCloseTo(0.13552558, 6);
   });
 
   it("非 Windows 平台即使存有同步配置仍使用感知曲线", async () => {
@@ -222,10 +222,10 @@ describe("感知音量控制", () => {
     settings.system.player.syncWindowsVolumeMixer = true;
     status.volume = 0.1;
     await nextTick();
-    expect(wrapper.text()).toContain("50%");
+    expect(wrapper.text()).toContain("25%");
     wrapper.getComponent(SSlider).vm.$emit("change", 0.5);
-    expect(player.setVolume).toHaveBeenLastCalledWith(0.1);
+    expect(player.setVolume).toHaveBeenLastCalledWith(expect.closeTo(0.316439, 5));
     dispatch("player.volumeUp");
-    expect(status.volume).toBeCloseTo(0.12589254, 6);
+    expect(status.volume).toBeCloseTo(0.37068248, 6);
   });
 });

@@ -352,8 +352,8 @@ importers:
         specifier: ^1.10.0
         version: 1.10.0
       lyric-dom:
-        specifier: ^0.2.1
-        version: 0.2.1
+        specifier: ^0.3.0
+        version: 0.3.0
       markdown-it-mathjax3:
         specifier: ^4.3.2
         version: 4.3.2
@@ -3973,8 +3973,8 @@ packages:
     resolution: {integrity: sha512-Jo6dJ04CmSjuznwJSS3pUeWmd/H0ffTlkXXgwZi+eq1UCmqQwCh+eLsYOYCwY991i2Fah4h1BEMCx4qThGbsiA==}
     engines: {node: '>=10'}
 
-  lyric-dom@0.2.1:
-    resolution: {integrity: sha512-Vg1UU+7jIcRvllqpvq2FLB9S+9tn9jjP7YkGWfYq2K1ZzEOF2/oi5WW8BH0HcBwPkOQ6lzoR4RyMsqZvt6g+lg==}
+  lyric-dom@0.3.0:
+    resolution: {integrity: sha512-4QQEx5TPzA0IHAX2h0QLG205mR6N9F0uBzvkYjLvjPbCvZk5T9ZzTmDY7pv4N29lT6T1dOn4xpWcDnNyU7tH6A==}
 
   lyric-kit@0.6.1:
     resolution: {integrity: sha512-/Qi3kJtLzlw5+oi5yEPpBPSzK5FW0CFHZCXtApvnv6QOjUeDnrF9p2G3heKCVesLWJi122YmWWNgVAdZhiljlA==}
@@ -9380,7 +9380,7 @@ snapshots:
     dependencies:
       yallist: 4.0.0
 
-  lyric-dom@0.2.1: {}
+  lyric-dom@0.3.0: {}
 
   lyric-kit@0.6.1: {}
 

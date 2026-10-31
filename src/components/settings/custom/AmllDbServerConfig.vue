@@ -44,7 +44,7 @@ const handleReset = (): void => {
 /** 校验并保存来源列表，保留拖拽设置的顺序 */
 const handleConfirm = (): void => {
   const urls = servers.value.map((server) => server.url.trim());
-  if (urls.length === 0 || urls.some((url) => !isValidTtmlServer(url))) {
+  if (urls.some((url) => !isValidTtmlServer(url))) {
     toast.error(t("settings.amllDbServer.invalid"));
     return;
   }

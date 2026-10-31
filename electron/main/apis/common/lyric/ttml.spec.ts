@@ -1,11 +1,11 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_AMLL_DB_SERVERS } from "@shared/defaults/lyrics";
+import { DEFAULT_AMLL_DB_SERVERS, OFFICIAL_AMLL_API } from "@shared/defaults/lyrics";
 
 const state = vi.hoisted(() => ({
   enabled: true,
   sources: [] as string[],
-  cache: new Map<string, string | null>(),
+  cache: new Map<string, { content: string | null; fresh: boolean }>(),
   fetch: vi.fn(),
   write: vi.fn(),
 }));
@@ -14,20 +14,87 @@ vi.mock("@main/store", () => ({
     get: (key: string) => (key === "lyric.enableOnlineTTMLLyric" ? state.enabled : state.sources),
   },
 }));
+vi.mock("@main/utils/config", () => ({ appVersion: "1.3.5-beta.1" }));
 vi.mock("@main/utils/logger", () => ({ coreLog: { warn: vi.fn() } }));
 vi.mock("@main/database/lyricTtmlCache", () => ({
   getCachedTTML: (platform: string, id: string, source: string) => {
     const key = JSON.stringify([platform, id, source]);
-    return state.cache.has(key) ? state.cache.get(key) : "miss";
+    return state.cache.get(key) ?? null;
   },
   setCachedTTML: (platform: string, id: string, source: string, content: string | null) => {
     state.write(platform, id, source, content);
-    state.cache.set(JSON.stringify([platform, id, source]), content);
+    state.cache.set(JSON.stringify([platform, id, source]), { content, fresh: true });
   },
 }));
 import { fetchTTML, waitForTrackTTML } from "./ttml";
 
 describe("TTML 多源顺序回退", () => {
+  it.each([
+    ["netease", "ncmMusicId"],
+    ["qqmusic", "qqMusicId"],
+  ] as const)("官方 API 使用 %s 的查询参数并读取 JSON 歌词", async (platform, query) => {
+    state.sources = [OFFICIAL_AMLL_API];
+    state.fetch.mockResolvedValue(Response.json({ data: { lyrics: "<tt>official</tt>" } }));
+    expect(await fetchTTML(platform, ["id/1"])).toBe("<tt>official</tt>");
+    expect(state.fetch.mock.calls[0][0]).toBe(`${OFFICIAL_AMLL_API}?${query}=id%2F1`);
+    expect(state.write).toHaveBeenCalledWith(
+      platform,
+      "id/1",
+      OFFICIAL_AMLL_API,
+      "<tt>official</tt>",
+    );
+  });
+
+  it("列表留空时使用官方 API 和备用镜像", async () => {
+    state.sources = [];
+    state.fetch
+      .mockResolvedValueOnce(Response.json({ data: {} }))
+      .mockResolvedValueOnce(new Response("<tt>mirror</tt>"));
+    expect(await fetchTTML("netease", ["1"])).toBe("<tt>mirror</tt>");
+    expect(state.fetch.mock.calls[0][0]).toBe(`${OFFICIAL_AMLL_API}?ncmMusicId=1`);
+    expect(state.write).toHaveBeenCalledWith("netease", "1", OFFICIAL_AMLL_API, null);
+  });
+
+  it("镜像仅包含歌曲 ID 占位符时也可使用", async () => {
+    state.sources = ["https://custom.example/%s.ttml"];
+    state.fetch.mockResolvedValue(new Response("<tt>custom</tt>"));
+    expect(await fetchTTML("netease", ["id/1"])).toBe("<tt>custom</tt>");
+    expect(state.fetch.mock.calls[0][0]).toBe("https://custom.example/id%2F1.ttml");
+  });
+
+  it.each([429, 500])("全部源遇到临时 HTTP %i 故障时回退旧缓存且不刷新时间", async (status) => {
+    state.cache.set(JSON.stringify(["netease", "1", state.sources[0]]), {
+      content: "<tt>stale</tt>",
+      fresh: false,
+    });
+    state.fetch.mockImplementation(() => Promise.resolve(new Response("", { status })));
+    expect(await fetchTTML("netease", ["1"])).toBe("<tt>stale</tt>");
+    expect(state.fetch).toHaveBeenCalledTimes(2);
+    expect(state.write).not.toHaveBeenCalled();
+  });
+
+  it("首源临时失败时优先使用备用源的新内容", async () => {
+    state.cache.set(JSON.stringify(["netease", "1", state.sources[0]]), {
+      content: "<tt>stale</tt>",
+      fresh: false,
+    });
+    state.fetch
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce(new Response("<tt>fresh</tt>"));
+    expect(await fetchTTML("netease", ["1"])).toBe("<tt>fresh</tt>");
+  });
+
+  it("源明确返回不存在时不恢复过期歌词", async () => {
+    state.sources = [OFFICIAL_AMLL_API];
+    state.cache.set(JSON.stringify(["netease", "1", OFFICIAL_AMLL_API]), {
+      content: "<tt>removed</tt>",
+      fresh: false,
+    });
+    state.fetch.mockResolvedValue(new Response("", { status: 404 }));
+    expect(await fetchTTML("netease", ["1"])).toBeNull();
+    expect(state.write).toHaveBeenCalledWith("netease", "1", OFFICIAL_AMLL_API, null);
+  });
+
   it("清理会等待相关歌曲的完整备用源回退", async () => {
     let finish!: (response: Response) => void;
     state.fetch.mockResolvedValueOnce(new Response("", { status: 404 })).mockReturnValueOnce(
@@ -50,7 +117,7 @@ describe("TTML 多源顺序回退", () => {
   });
   beforeEach(() => {
     state.enabled = true;
-    state.sources = [...DEFAULT_AMLL_DB_SERVERS];
+    state.sources = ["https://amlldb.bikonoo.com/%p/%s.ttml", DEFAULT_AMLL_DB_SERVERS[1]];
     state.cache.clear();
     state.fetch.mockReset();
     state.write.mockReset();
@@ -97,7 +164,10 @@ describe("TTML 多源顺序回退", () => {
   });
 
   it("重排后优先新首源，旧正缓存不能越过优先级", async () => {
-    state.cache.set(JSON.stringify(["netease", "1", state.sources[0]]), "<tt>old</tt>");
+    state.cache.set(JSON.stringify(["netease", "1", state.sources[0]]), {
+      content: "<tt>old</tt>",
+      fresh: true,
+    });
     state.sources.reverse();
     state.fetch.mockResolvedValue(new Response("<tt>new</tt>"));
     expect(await fetchTTML("netease", ["1"])).toBe("<tt>new</tt>");
@@ -105,7 +175,10 @@ describe("TTML 多源顺序回退", () => {
   });
 
   it("旧源负缓存不会阻止新增源请求", async () => {
-    state.cache.set(JSON.stringify(["netease", "1", state.sources[0]]), null);
+    state.cache.set(JSON.stringify(["netease", "1", state.sources[0]]), {
+      content: null,
+      fresh: true,
+    });
     state.fetch.mockResolvedValue(new Response("<tt>new</tt>"));
     expect(await fetchTTML("netease", ["1"])).toBe("<tt>new</tt>");
     expect(state.fetch).toHaveBeenCalledTimes(1);

@@ -1403,15 +1403,15 @@
       "description": "管理多个歌词源，按优先级依次获取歌词",
       "placeholder": "请输入 AMLL TTML DB 地址",
       "warning": "如果你不清楚这里是做什么的，请不要修改",
-      "hint": "拖拽左侧手柄调整优先级，越靠上越优先；获取失败或没有歌词时自动尝试下一个源",
+      "hint": "拖拽左侧手柄调整优先级，越靠上越优先；获取失败或没有歌词时自动尝试下一个源，列表留空时使用默认来源",
       "add": "添加源",
       "drag": "拖拽调整优先级",
       "source": "歌词源 {index}",
       "remove": "移除歌词源 {index}",
       "duplicate": "歌词源地址不能重复",
-      "placeholders": "%p 为平台目录，%s 为歌曲 ID",
+      "placeholders": "官方 API 无需占位符；镜像地址中 %s 为歌曲 ID（必填），%p 为平台目录（可选）",
       "docsHint": "更多信息可前往",
-      "invalid": "请至少配置一个有效的 HTTP 或 HTTPS 地址，每个地址均需包含 %p 和 %s"
+      "invalid": "请输入 AMLL 官方 API 地址或包含 %s 的有效 HTTP、HTTPS 镜像地址"
     },
     "enableExcludeLyrics": {
       "label": "启用歌词排除",
@@ -1633,6 +1633,10 @@
     "enableScale": {
       "label": "歌词缩放",
       "description": "聚焦播放行，非激活行轻微缩小"
+    },
+    "enableBalancedWrap": {
+      "label": "智能换行",
+      "description": "超长歌词行折成长度相近的几行，优先在标点、空格处断开"
     },
     "lyricAlignment": {
       "label": "歌词水平对齐",
@@ -1899,8 +1903,8 @@
       "description": "任务栏歌词的文字大小（像素）"
     },
     "taskbarLyricFontWeight": {
-      "label": "字重",
-      "description": "任务栏歌词的文字粗细"
+      "label": "歌词字重",
+      "description": "设置任务栏主歌词和下一行歌词的字重"
     },
     "taskbarLyricShowCover": {
       "label": "显示封面",
@@ -1925,10 +1929,6 @@
     "taskbarLyricWordByWord": {
       "label": "逐字高亮",
       "description": "按单词进度逐字渲染高亮"
-    },
-    "taskbarLyricFontWeight": {
-      "label": "歌词字重",
-      "description": "设置任务栏主歌词和下一行歌词的字重"
     },
     "taskbarLyricTranslationFontWeight": {
       "label": "翻译字重",

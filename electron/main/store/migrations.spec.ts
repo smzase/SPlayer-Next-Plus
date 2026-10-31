@@ -5,6 +5,37 @@ import { migrateConfig } from "./migrations";
 import { deepMerge } from "./utils";
 
 describe("TTML 来源配置迁移", () => {
+  it("已迁移的 fork 配置仅替换旧默认镜像，保留自定义源顺序", () => {
+    const config = migrateConfig(
+      deepMerge(defaultSystemConfig, {
+        __configVersion: 1,
+        lyric: {
+          amllDbServer: [
+            "https://custom.example/%s.ttml",
+            "https://amlldb.bikonoo.com/%p/%s.ttml",
+            DEFAULT_AMLL_DB_SERVERS[1],
+          ],
+        },
+      }),
+    );
+    expect(config.lyric.amllDbServer).toEqual([
+      "https://custom.example/%s.ttml",
+      ...DEFAULT_AMLL_DB_SERVERS,
+    ]);
+    expect(migrateConfig(config).lyric.amllDbServer).toEqual(config.lyric.amllDbServer);
+  });
+
+  it("空列表和用户移除旧默认源的选择保持不变", () => {
+    expect(
+      migrateConfig(
+        deepMerge(defaultSystemConfig, {
+          __configVersion: 1,
+          lyric: { amllDbServer: [] },
+        }),
+      ).lyric.amllDbServer,
+    ).toEqual([]);
+  });
+
   it("新配置包含两个默认源", () => {
     expect(migrateConfig(deepMerge(defaultSystemConfig, {})).lyric.amllDbServer).toEqual(
       DEFAULT_AMLL_DB_SERVERS,

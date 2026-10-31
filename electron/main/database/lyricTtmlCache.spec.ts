@@ -21,20 +21,23 @@ describe("TTML 来源缓存隔离", () => {
   it("同一歌曲不同源的正负缓存互不覆盖", () => {
     setCachedTTML("netease", "1", "first", null);
     setCachedTTML("netease", "1", "second", "<tt>second</tt>");
-    expect(getCachedTTML("netease", "1", "first")).toBeNull();
-    expect(getCachedTTML("netease", "1", "second")).toBe("<tt>second</tt>");
-    expect(getCachedTTML("netease", "1", "third")).toBe("miss");
-    expect(getCachedTTML("qqmusic", "1", "second")).toBe("miss");
+    expect(getCachedTTML("netease", "1", "first")).toEqual({ content: null, fresh: true });
+    expect(getCachedTTML("netease", "1", "second")).toEqual({
+      content: "<tt>second</tt>",
+      fresh: true,
+    });
+    expect(getCachedTTML("netease", "1", "third")).toBeNull();
+    expect(getCachedTTML("qqmusic", "1", "second")).toBeNull();
   });
 
-  it("过期只移除当前源缓存，清理操作移除所有源", () => {
+  it("过期保留旧内容供故障回退，主动清理移除所有源", () => {
     setCachedTTML("netease", "1", "first", "first");
     setCachedTTML("netease", "1", "second", "second");
     state.expired = true;
-    expect(getCachedTTML("netease", "1", "first")).toBe("miss");
+    expect(getCachedTTML("netease", "1", "first")).toEqual({ content: "first", fresh: false });
     state.expired = false;
-    expect(getCachedTTML("netease", "1", "second")).toBe("second");
+    expect(getCachedTTML("netease", "1", "second")).toEqual({ content: "second", fresh: true });
     clearLyricTtmlCache();
-    expect(getCachedTTML("netease", "1", "second")).toBe("miss");
+    expect(getCachedTTML("netease", "1", "second")).toBeNull();
   });
 });

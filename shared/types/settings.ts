@@ -336,7 +336,7 @@ export interface McpAgentApp {
 export interface OnlineLyricSettings {
   /** 启用在线 TTML 歌词 */
   enableOnlineTTMLLyric: boolean;
-  /** 按优先级排列的 AMLL TTML DB 地址，需含 %p 和 %s 占位符 */
+  /** 按优先级排列的官方 API 或镜像地址，镜像需含 %s，%p 可选 */
   amllDbServer: string[];
 }
 

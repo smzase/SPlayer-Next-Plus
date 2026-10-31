@@ -12,23 +12,22 @@ describe("音量曲线", () => {
     expect(volumeGainToPosition(1)).toBe(1);
   });
 
-  it("主体区间位置与 dB 线性，每格滚轮 2 dB", () => {
-    expect(toDb(0.5)).toBeCloseTo(-20, 6);
-    expect(toDb(0.1)).toBeCloseTo(-36, 6);
-    for (const position of [0.15, 0.35, 0.6, 0.95]) {
-      expect(toDb(position) - toDb(position - 0.05)).toBeCloseTo(2, 6);
-    }
+  it("半程约 -10 dB，听感为满音量的一半", () => {
+    expect(toDb(0.5)).toBeCloseTo(-10, 0);
+    expect(toDb(0.8)).toBeCloseTo(-3.2, 1);
   });
 
-  it("底部线性收敛到静音且与主体连续", () => {
-    expect(volumePositionToGain(0.05)).toBeCloseTo(volumePositionToGain(0.1) / 2, 9);
-    expect(volumePositionToGain(0.1 - 1e-9)).toBeCloseTo(volumePositionToGain(0.1), 6);
-    expect(toDb(0.01)).toBeCloseTo(-56, 0);
+  it("最低一档非常小声但可闻", () => {
+    expect(toDb(0.05)).toBeCloseTo(-43, 0);
+  });
+
+  it("步进的浮点尾差不会在静音附近留下增益", () => {
+    expect(volumePositionToGain(0.1 - 0.05 - 0.05)).toBe(0);
   });
 
   it("位置与增益互为逆映射", () => {
-    for (const position of [0.01, 0.05, 0.1, 0.2, 0.5, 0.77, 1]) {
-      expect(volumeGainToPosition(volumePositionToGain(position))).toBeCloseTo(position, 5);
+    for (const position of [0.01, 0.05, 0.2, 0.5, 0.77, 1]) {
+      expect(volumeGainToPosition(volumePositionToGain(position))).toBeCloseTo(position, 9);
     }
   });
 });

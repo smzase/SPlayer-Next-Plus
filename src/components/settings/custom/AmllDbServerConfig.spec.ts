@@ -100,7 +100,7 @@ describe("TTML 来源编辑", () => {
       .find((button) => button.text() === "确认")!
       .trigger("click");
     expect(state.error).toHaveBeenLastCalledWith(zhCN.settings.amllDbServer.duplicate);
-    await wrapper.findAll("input")[1].setValue("https://example.com/%s.ttml");
+    await wrapper.findAll("input")[1].setValue("https://example.com/lyrics.ttml");
     await wrapper
       .findAll("button")
       .find((button) => button.text() === "确认")!

@@ -1,5 +1,6 @@
 import type { SystemConfig } from "@shared/types/settings";
 import { normalizeTtmlServers } from "@shared/utils/ttmlServer";
+import { OFFICIAL_AMLL_API } from "@shared/defaults/lyrics";
 
 /** 配置版本键名 */
 const META_KEY = "__configVersion";
@@ -20,6 +21,19 @@ export const migrations: Migration[] = [
     version: 1,
     migrate: (data) => {
       data.lyric.amllDbServer = normalizeTtmlServers(data.lyric.amllDbServer);
+    },
+  },
+  {
+    version: 2,
+    migrate: (data) => {
+      // 仅将旧默认镜像替换为官方 API，保留自定义来源及其优先级
+      data.lyric.amllDbServer = [
+        ...new Set(
+          data.lyric.amllDbServer.map((source) =>
+            source === "https://amlldb.bikonoo.com/%p/%s.ttml" ? OFFICIAL_AMLL_API : source,
+          ),
+        ),
+      ];
     },
   },
 ];

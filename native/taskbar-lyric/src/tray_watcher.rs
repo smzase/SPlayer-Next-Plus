@@ -23,6 +23,10 @@ pub type TrayChangedCallback = Box<dyn Fn() + Send + Sync + 'static>;
 static GLOBAL_CALLBACK: LazyLock<Mutex<Option<Arc<TrayChangedCallback>>>> =
     LazyLock::new(|| Mutex::new(None));
 
+/// 任务栏或托盘位置变化时通知布局线程重新计算
+/// @param event - Windows 可访问性事件类型
+/// @param hwnd - 发生变化的窗口句柄
+/// @param id_object - 发生变化的对象标识，仅处理窗口对象
 unsafe extern "system" fn win_event_proc(
     _h_win_event_hook: HWINEVENTHOOK,
     event: u32,
@@ -37,7 +41,8 @@ unsafe extern "system" fn win_event_proc(
         let len = unsafe { GetClassNameW(hwnd, &mut buffer) };
         if len > 0 {
             let name = String::from_utf16_lossy(&buffer[..len as usize]);
-            if name == "TrayNotifyWnd" {
+            // 独立歌词窗口需要跟随任务栏本体位移，包括自动隐藏状态变化
+            if name == "TrayNotifyWnd" || name == "Shell_TrayWnd" {
                 // 先 clone Arc 再释放锁，避免回调执行期间阻塞其它 GLOBAL_CALLBACK 访问
                 let callback = GLOBAL_CALLBACK
                     .lock()

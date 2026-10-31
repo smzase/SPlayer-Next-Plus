@@ -18,26 +18,23 @@ export type Platform = "netease" | "qqmusic";
  * @param platform - 歌词平台
  * @param id - 平台歌曲 ID
  * @param source - 来源模板
- * @returns 歌词文本、未命中记录 null，或无有效缓存时的 "miss"
+ * @returns 缓存内容和有效期状态，未命中时为 null
  */
 export const getCachedTTML = (
   platform: Platform,
   id: string,
   source: string,
-): string | null | "miss" => {
+): { content: string | null; fresh: boolean } | null => {
   const row = getDb()
     .prepare(
       "SELECT content, fetched_at FROM lyric_ttml_cache WHERE platform = ? AND id = ? AND source = ?",
     )
     .get(platform, id, source) as { content: string | null; fetched_at: number } | undefined;
-  if (!row) return "miss";
-  if (isConfiguredCacheExpired(row.fetched_at, "database")) {
-    getDb()
-      .prepare("DELETE FROM lyric_ttml_cache WHERE platform = ? AND id = ? AND source = ?")
-      .run(platform, id, source);
-    return "miss";
-  }
-  return row.content;
+  if (!row) return null;
+  return {
+    content: row.content,
+    fresh: !isConfiguredCacheExpired(row.fetched_at, "database"),
+  };
 };
 
 /**

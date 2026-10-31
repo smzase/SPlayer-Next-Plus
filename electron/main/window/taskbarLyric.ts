@@ -530,6 +530,7 @@ const applyLayout = (layout: JsTaskbarLayout): void => {
     isLight: layout.extra.isLight,
     anchor,
     maxWidth: windowWidth,
+    height: availHeight,
   };
   lastLayoutEvent = layoutEvent;
   win.webContents.send("taskbarLyric:layout", layoutEvent);

@@ -4,6 +4,10 @@ import type { LyricLine } from "lyric-kit";
 import { getWordSweepProgress } from "lyric-kit";
 import { getNowPlayingCurrentMs } from "@windows/shared/composables/useNowPlayingSync";
 import { getLineText, getWordText } from "@shared/utils/lyrics";
+import {
+  computeHorizontalScrollRange,
+  computeLyricScrollOffset,
+} from "@windows/shared/lyricScroll";
 
 const props = withDefaults(
   defineProps<{
@@ -12,12 +16,15 @@ const props = withDefaults(
     wordByWord?: boolean;
     anchor?: "left" | "right";
     layoutWidth?: number;
+    /** 翻译行使用对应原文的时间轴 */
+    timingLine?: LyricLine;
   }>(),
   { wordByWord: false, anchor: "left" },
 );
 
 const useKaraoke = computed(() => props.wordByWord && !!props.line);
 const plainText = computed(() => props.text ?? getLineText(props.line));
+const scrollTiming = computed(() => props.timingLine ?? props.line);
 
 const wrapperRef = ref<HTMLElement | null>(null);
 const contentRef = ref<HTMLElement | null>(null);
@@ -25,11 +32,10 @@ const overflowPx = ref(0);
 const isOverflow = computed(() => overflowPx.value > 0);
 let lastTransform = "";
 
-/** 前 30% 停在开头 */
-const SCROLL_START_AT = 0.3;
-/** 比 endTime 早多少滚到底 */
-const END_MARGIN_MS = 2000;
+let containerWidth = 0;
+let scrollActivatedAtMs = 0;
 
+/** 测量实际布局宽度，避免祖先动画缩放干扰滚动范围 */
 const measure = (): void => {
   const outer = wrapperRef.value;
   const inner = contentRef.value;
@@ -37,28 +43,30 @@ const measure = (): void => {
     overflowPx.value = 0;
     return;
   }
-  const diff = inner.getBoundingClientRect().width - outer.getBoundingClientRect().width;
-  overflowPx.value = diff > 0.5 ? diff : 0;
+  containerWidth = outer.clientWidth;
+  overflowPx.value = computeHorizontalScrollRange(containerWidth, inner.scrollWidth, 0).distance;
   if (overflowPx.value === 0) {
     inner.style.transform = "translateX(0)";
     lastTransform = "translateX(0)";
   }
 };
 
-/** 根据进度计算平移量——溢出时始终向左滚（与桌面歌词一致），不做来回 */
+/**
+ * 按原文演唱位置滚动超长歌词和翻译
+ * @param currentMs - 当前播放时间，单位毫秒
+ * @returns CSS 横向平移值
+ */
 const getScrollTransform = (currentMs: number): string => {
-  const overflow = overflowPx.value;
-  if (overflow <= 0 || !props.line) return "translateX(0)";
-  const { startTime, endTime } = props.line;
-  if (endTime <= startTime) return "translateX(0)";
-  const end = Math.max(startTime + 1, endTime - END_MARGIN_MS);
-  const duration = end - startTime;
-  if (duration <= 0) return "translateX(0)";
-  const progress = Math.max(0, Math.min(1, (currentMs - startTime) / duration));
-  if (progress <= SCROLL_START_AT) return "translateX(0)";
-  const ratio = (progress - SCROLL_START_AT) / (1 - SCROLL_START_AT);
-  const offset = overflow * ratio;
-  return `translateX(-${offset.toFixed(3)}px)`;
+  const timing = scrollTiming.value;
+  if (overflowPx.value <= 0 || !timing) return "translateX(0)";
+  const offset = computeLyricScrollOffset({
+    currentMs,
+    activatedAtMs: scrollActivatedAtMs,
+    timingLine: timing,
+    containerWidth,
+    range: { startOffset: 0, distance: overflowPx.value },
+  });
+  return `translateX(${offset.toFixed(3)}px)`;
 };
 
 const wordRefs: HTMLSpanElement[] = [];
@@ -86,7 +94,7 @@ const setWordRef = (el: Element | { $el?: Element } | null, index: number): void
 let resizeObserver: ResizeObserver | null = null;
 let rafId = 0;
 let lastWordProgress: string[] = [];
-const needsRaf = computed(() => useKaraoke.value || isOverflow.value);
+const needsRaf = computed(() => useKaraoke.value || (isOverflow.value && !!scrollTiming.value));
 
 const resetRenderCache = (): void => {
   lastTransform = "";
@@ -137,6 +145,12 @@ const stopRenderLoop = (): void => {
   }
 };
 
+/** 从成为当前行的时刻开始横向滚动 */
+const activateScroll = (): void => {
+  scrollActivatedAtMs = Math.max(scrollTiming.value?.startTime ?? 0, getNowPlayingCurrentMs());
+};
+
+watch(scrollTiming, activateScroll);
 watch(
   () => props.line,
   () => {
@@ -166,6 +180,7 @@ onMounted(() => {
   resizeObserver = new ResizeObserver(measure);
   if (wrapperRef.value) resizeObserver.observe(wrapperRef.value);
   if (contentRef.value) resizeObserver.observe(contentRef.value);
+  activateScroll();
   measure();
   document.addEventListener("visibilitychange", handleVisibilityChange);
   startRenderLoop();

@@ -179,6 +179,8 @@ export interface LyricSettings {
   enableScale: boolean;
   /** 是否始终将背景行置于主行下方 */
   bgAlwaysBelow: boolean;
+  /** 超长行智能换行 */
+  enableBalancedWrap: boolean;
   /** 逐字高亮效果 */
   enableWordHighlight: boolean;
   /** 逐字上浮动画 */

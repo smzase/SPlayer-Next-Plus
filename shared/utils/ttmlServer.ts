@@ -1,12 +1,13 @@
-import { DEFAULT_AMLL_DB_SERVERS } from "../defaults/lyrics";
+import { DEFAULT_AMLL_DB_SERVERS, OFFICIAL_AMLL_API } from "../defaults/lyrics";
 
 /**
- * 校验 TTML 源模板，平台目录和歌曲 ID 均须保留占位符
+ * 校验官方 API 或含歌曲 ID 占位符的镜像模板
  * @param template - 地址模板
  * @returns 是否为有效 HTTP 或 HTTPS 模板
  */
 export const isValidTtmlServer = (template: string): boolean => {
-  if (!template.includes("%p") || !template.includes("%s")) return false;
+  if (template === OFFICIAL_AMLL_API) return true;
+  if (!template.includes("%s")) return false;
   try {
     const url = new URL(template.replaceAll("%p", "ncm-lyrics").replaceAll("%s", "1"));
     return url.protocol === "http:" || url.protocol === "https:";

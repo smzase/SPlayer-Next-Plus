@@ -170,6 +170,17 @@ afterEach(() => {
 });
 
 describe("任务栏独立歌词窗口", () => {
+  it("将小任务栏实际 DIP 高度传给歌词与播放列表页面", async () => {
+    mocks.screenToDipRect.mockReturnValue({ x: 0, y: 1050, width: 700, height: 24 });
+    const api = await import("./taskbarLyric");
+    api.createTaskbarLyricWindow();
+    mocks.layouts[0](layout());
+    expect(mocks.windows[0].webContents.send).toHaveBeenCalledWith(
+      "taskbarLyric:layout",
+      expect.objectContaining({ height: 24 }),
+    );
+  });
+
   it("普通模式保留完整交互区域，重复布局不重设边界或裁剪", async () => {
     const api = await import("./taskbarLyric");
     api.createTaskbarLyricWindow();
